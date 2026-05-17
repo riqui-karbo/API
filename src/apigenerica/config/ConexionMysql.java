@@ -18,7 +18,7 @@ import java.util.List;
 public class ConexionMysql {
 
     private static HikariDataSource ds;
-    private static final String URL = "jdbc:mysql://localhost:3306/erp_sistema";
+    private static final String URL = "jdbc:mysql://localhost:3306/mysql";
     private static final String USUARIO = "root";
     private static final String PWD = "";
 
