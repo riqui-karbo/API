@@ -47,7 +47,7 @@ public class AuthController {
         System.out.println("[DEBUG AuthController] Email recibido: ' " + email + "' ");
         System.out.println("[DEBUG AuthController] Password recibido: ' " + password + "' ");
         if (login != null) {
-            String hashBd = (String) login.get("hash ");
+            String hashBd = (String) login.get("hash");
             System.out.println("[DEBUG AuthController] Hash en BD: ' " + hashBd + "' ");
             boolean pwdMatch = BCrypt.checkpw(password, hashBd);
             System.out.println("[DEBUG AuthController] Match BCrypt:  " + pwdMatch);
@@ -90,13 +90,13 @@ public class AuthController {
             // Verificar si el token es válido
             DecodedJWT jwt = jwtService.verificarToken(refreshToken);
 
-            String tipo = jwt.getClaim("tipo ").asString();
-            if (!"refresh ".equals(tipo)) {
+            String tipo = jwt.getClaim("tipo").asString();
+            if (!"refresh".equals(tipo)) {
                 ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Token inválido. "));
                 return;
             }
 
-            Long usuarioId = jwt.getClaim("id ").asLong();
+            Long usuarioId = jwt.getClaim("id").asLong();
 
             // Buscar rol del usuario
             String rol = usuarioDao.obtenerRol(usuarioId);
@@ -110,8 +110,8 @@ public class AuthController {
             String nuevoRefresh = jwtService.generarRefreshToken(usuarioId);
 
             Map<String, String> respuesta = new HashMap<>();
-            respuesta.put("access_token ", nuevoAccess);
-            respuesta.put("refresh_token ", nuevoRefresh);
+            respuesta.put("access_token", nuevoAccess);
+            respuesta.put("refresh_token", nuevoRefresh);
             ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
         } catch (JWTVerificationException e) {
             ctx.status(401).json(ApiRespuesta.error("Refresh token expirado o inválido."));

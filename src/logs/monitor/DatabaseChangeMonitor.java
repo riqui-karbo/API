@@ -25,7 +25,6 @@ public class DatabaseChangeMonitor implements Runnable {
 
     private static final long   INTERVALO_MS    = 5_000;
     private static final String USUARIO_EXTERNO = "sistema/web";
-    private static final String DB_NAME         = AppConfig.DB_CLIENTE;
 
     private volatile boolean activo = true;
 
@@ -79,59 +78,60 @@ public class DatabaseChangeMonitor implements Runnable {
     // ── Snapshot inicial ──────────────────────────────────────────────────────
 
     private void cargarSnapshotInicial() throws SQLException {
-        Connection con = ConexionMysql.getConexion(AppConfig.DB_CLIENTE);
-        try {
-            snapMeta.put("erp_meta_tablas", leerTablaGeneral(con, "erp_meta_tablas", "id"));
-            snapMeta.put("erp_modulos",   leerTablaGeneral(con, "erp_modulos",   "id"));
-            snapMeta.put("erp_meta_columnas", leerTablaGeneral(con, "erp_meta_columnas", "id"));
-            snapMeta.put("erp_users",     leerTablaGeneral(con, "erp_users",     "id"));
-            snapMeta.put("erp_roles",     leerTablaGeneral(con, "erp_roles",     "id"));
+        //CAPA 1: Metadatos del sistema (siempre en erp_sistema)
+        try (Connection conSys = ConexionMysql.getConexion(AppConfig.DB_SISTEMA)) {
+            snapMeta.put("erp_meta_tablas",     leerTablaGeneral(conSys, "erp_meta_tablas", "id"));
+            snapMeta.put("erp_modulos",         leerTablaGeneral(conSys, "erp_modulos", "id"));
+            snapMeta.put("erp_meta_columnas",   leerTablaGeneral(conSys, "erp_meta_columnas", "id"));
+            snapMeta.put("erp_users",           leerTablaGeneral(conSys, "erp_users", "id"));
+            snapMeta.put("erp_roles",           leerTablaGeneral(conSys, "erp_roles", "id"));
+        }
 
-            for (String tabla : descubrirTablasUsuario(con)) {
-                List<String> pks = obtenerPKs(con, tabla);
+        //CAPA 2: Tablas de usuario (en erp_empresa)
+        try (Connection conCli = ConexionMysql.getConexion(AppConfig.DB_CLIENTE)) {
+            for (String tabla : descubrirTablasUsuario(conCli)) {
+                List<String> pks = obtenerPKs(conCli, tabla);
                 pkCache.put(tabla, pks);
-                snapUser.put(tabla, leerTablaUsuario(con, tabla, pks));
+                snapUser.put(tabla, leerTablaUsuario(conCli, tabla, pks));
                 System.out.println("[Monitor] Vigilando tabla de usuario: " + tabla + " (PK: " + pks + ")");
             }
-        } finally {
-            con.close();
         }
     }
 
     // ── Ciclo de detección ────────────────────────────────────────────────────
 
     private void detectarCambios() throws SQLException {
-        Connection con = ConexionMysql.getConexion(AppConfig.DB_CLIENTE);
-        try {
-            // Capa 1
+        // 🔹 CAPA 1: Metadatos del sistema
+        try (Connection conSys = ConexionMysql.getConexion(AppConfig.DB_SISTEMA)) {
             Map<String, Map<Integer, Map<String, String>>> actualMeta = new LinkedHashMap<>();
-            actualMeta.put("erp_meta_tablas", leerTablaGeneral(con, "erp_meta_tablas", "id"));
-            actualMeta.put("erp_modulos",   leerTablaGeneral(con, "erp_modulos",   "id"));
-            actualMeta.put("erp_meta_columnas", leerTablaGeneral(con, "erp_meta_columnas", "id"));
-            actualMeta.put("erp_users",     leerTablaGeneral(con, "erp_users",     "id"));
-            actualMeta.put("erp_roles",     leerTablaGeneral(con, "erp_roles",     "id"));
+            actualMeta.put("erp_meta_tablas",     leerTablaGeneral(conSys, "erp_meta_tablas", "id"));
+            actualMeta.put("erp_modulos",         leerTablaGeneral(conSys, "erp_modulos", "id"));
+            actualMeta.put("erp_meta_columnas",   leerTablaGeneral(conSys, "erp_meta_columnas", "id"));
+            actualMeta.put("erp_users",           leerTablaGeneral(conSys, "erp_users", "id"));
+            actualMeta.put("erp_roles",           leerTablaGeneral(conSys, "erp_roles", "id"));
 
             for (String tabla : actualMeta.keySet()) {
                 compararMeta(tabla, snapMeta.get(tabla), actualMeta.get(tabla));
                 snapMeta.put(tabla, actualMeta.get(tabla));
             }
+        }
 
-            // Capa 2
-            Set<String> tablasActuales = descubrirTablasUsuario(con);
+        // 🔹 CAPA 2: Tablas de usuario
+        try (Connection conCli = ConexionMysql.getConexion(AppConfig.DB_CLIENTE)) {
+            Set<String> tablasActuales = descubrirTablasUsuario(conCli);
             Set<String> tablasNuevas   = new LinkedHashSet<>();
 
             for (String tabla : tablasActuales) {
                 if (!snapUser.containsKey(tabla)) {
-                    List<String> pks = obtenerPKs(con, tabla);
+                    List<String> pks = obtenerPKs(conCli, tabla);
                     pkCache.put(tabla, pks);
-                    Map<String, Map<String, String>> filas = leerTablaUsuario(con, tabla, pks);
+                    Map<String, Map<String, String>> filas = leerTablaUsuario(conCli, tabla, pks);
                     snapUser.put(tabla, filas);
                     tablasNuevas.add(tabla);
                     System.out.println("[Monitor] Nueva tabla detectada: " + tabla + " (" + filas.size() + " fila(s))");
                     for (Map.Entry<String, Map<String, String>> entrada : filas.entrySet()) {
                         LogDAO.registrar(USUARIO_EXTERNO, "INSERT", tabla,
-                                "Fila existente en nueva tabla '" + tabla
-                                + "' [pk=" + entrada.getKey() + "] " + resumenFila(entrada.getValue()));
+                                "Fila existente en nueva tabla '" + tabla + "' [pk=" + entrada.getKey() + "] " + resumenFila(entrada.getValue()));
                     }
                 }
             }
@@ -150,15 +150,12 @@ public class DatabaseChangeMonitor implements Runnable {
 
             for (String tabla : tablasActuales) {
                 if (tablasNuevas.contains(tabla) || !snapUser.containsKey(tabla)) continue;
-                List<String>                         pks      = pkCache.get(tabla);
-                Map<String, Map<String, String>>     anterior = snapUser.get(tabla);
-                Map<String, Map<String, String>>     actual   = leerTablaUsuario(con, tabla, pks);
+                List<String> pks = pkCache.get(tabla);
+                Map<String, Map<String, String>> anterior = snapUser.get(tabla);
+                Map<String, Map<String, String>> actual = leerTablaUsuario(conCli, tabla, pks);
                 compararUsuario(tabla, anterior, actual);
                 snapUser.put(tabla, actual);
             }
-
-        } finally {
-            con.close();
         }
     }
 
@@ -232,7 +229,7 @@ public class DatabaseChangeMonitor implements Runnable {
                      "WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' " +
                      "AND TABLE_NAME NOT LIKE 'erp\\_%' ORDER BY TABLE_NAME";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, DB_NAME);
+            ps.setString(1, AppConfig.DB_CLIENTE);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) tablas.add(rs.getString("TABLE_NAME"));
             }
@@ -246,7 +243,7 @@ public class DatabaseChangeMonitor implements Runnable {
                      "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
                      "AND CONSTRAINT_NAME = 'PRIMARY' ORDER BY ORDINAL_POSITION";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, DB_NAME);
+            ps.setString(1, AppConfig.DB_CLIENTE);
             ps.setString(2, tabla);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) pks.add(rs.getString("COLUMN_NAME"));

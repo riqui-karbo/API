@@ -48,7 +48,7 @@ import io.javalin.http.UploadedFile;
 public class ApiGenerica {
 
     public static void main(String[] args) {
-// ── Auto-limpieza: matar procesos anteriores colgados ─────────
+        // ── Auto-limpieza: matar procesos anteriores colgados ─────────
         limpiarPuertoYProcesos(7000);
         // ── Inicializar conexión con MySQL ────────────────────────────
         ConexionMysql.inicializar();
@@ -71,8 +71,8 @@ public class ApiGenerica {
         try {
             ficheroService = new FicheroService();
         } catch (Exception e) {
-            System.err.println("[API] AVISO: FicheroService no disponible ( " + e.getMessage() + ") ");
-            System.err.println("[API] La API arranca sin soporte de ficheros. Cierra cualquier proceso Java anterior. ");
+            System.err.println("[API] AVISO: FicheroService no disponible (" + e.getMessage() + ")");
+            System.err.println("[API] La API arranca sin soporte de ficheros. Cierra cualquier proceso Java anterior.");
         }
 
         MetaService metaService = new MetaService(metaDao, validador, sqlService, ficheroService);
@@ -109,120 +109,126 @@ public class ApiGenerica {
 
         app.before(ctx -> {
             String path = ctx.path();
+            String method = ctx.method(); // ← NUEVO: obtener método HTTP
+    
+            // 🔥 Las peticiones OPTIONS (preflight CORS) NO llevan token y deben ser permitidas
+            if ("OPTIONS".equalsIgnoreCase(method)) {
+                return;
+            }
 
-            if (path.startsWith("/api/auth ") || path.startsWith("/api/store ") || path.equals("/test")) {
+            if (path.startsWith("/api/auth") || path.startsWith("/api/store") || path.equals("/test")) {
                 return; // Rutas públicas: no requieren token
             }
 
             // Extraer token de las rutas protegidas
-            String authHeader = ctx.header("Authorization ");
-            if (authHeader == null || !authHeader.startsWith("Bearer  ")) {
-                throw new NoAutorizadoException("Token no proporcionado. ", null);
+            String authHeader = ctx.header("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                throw new NoAutorizadoException("Token no proporcionado.", null);
             }
 
-            String token = authHeader.replace("Bearer  ", " ");
+            String token = authHeader.replace("Bearer ", "");
 
             try {
                 // Validar el token y extraer claims
                 DecodedJWT jwt = jwtService.verificarToken(token);
 
                 // Inyectar datos del usuario en el contexto
-                ctx.attribute("usuarioId ", jwt.getClaim("id ").asLong());
-                ctx.attribute("usuarioRol ", jwt.getClaim("rol ").asString());
+                ctx.attribute("usuarioId", jwt.getClaim("id").asLong());
+                ctx.attribute("usuarioRol", jwt.getClaim("rol").asString());
 
                 // Rutas de roles: solo admin puede GESTIONAR roles,
                 // pero cualquier usuario autenticado puede LEER sus permisos
-                if (path.startsWith("/api/roles ")) {
-                    String rol = jwt.getClaim("rol ").asString();
-                    boolean esLecturaPermisos = "GET ".equalsIgnoreCase(ctx.method())
-                            && path.matches("/api/roles/[^/]+/permisos ");
-                    if (!esLecturaPermisos && !"admin ".equalsIgnoreCase(rol)) {
-                        throw new NoAutorizadoException("Solo el administrador puede gestionar roles. ", null);
+                if (path.startsWith("/api/roles")) {
+                    String rol = jwt.getClaim("rol").asString();
+                    boolean esLecturaPermisos = "GET".equalsIgnoreCase(ctx.method())
+                            && path.matches("/api/roles/[^/]+/permisos");
+                    if (!esLecturaPermisos && !"admin".equalsIgnoreCase(rol)) {
+                        throw new NoAutorizadoException("Solo el administrador puede gestionar roles.", null);
                     }
                 }
 
                 // Rutas de administracion de BD: solo admin
-                if (path.startsWith("/api/admin ")) {
-                    String rol = jwt.getClaim("rol ").asString();
-                    if (!"admin ".equalsIgnoreCase(rol)) {
-                        throw new NoAutorizadoException("Solo el administrador puede administrar bases de datos. ", null);
+                if (path.startsWith("/api/admin")) {
+                    String rol = jwt.getClaim("rol").asString();
+                    if (!"admin".equalsIgnoreCase(rol)) {
+                        throw new NoAutorizadoException("Solo el administrador puede administrar bases de datos.", null);
                     }
                 }
 
                 // Rutas de logs: solo admin
-                if (path.startsWith("/api/logs ")) {
-                    String rol = jwt.getClaim("rol ").asString();
-                    if (!"admin ".equalsIgnoreCase(rol)) {
-                        throw new NoAutorizadoException("Solo el administrador puede consultar los logs. ", null);
+                if (path.startsWith("/api/logs")) {
+                    String rol = jwt.getClaim("rol").asString();
+                    if (!"admin".equalsIgnoreCase(rol)) {
+                        throw new NoAutorizadoException("Solo el administrador puede consultar los logs.", null);
                     }
                 }
 
             } catch (NoAutorizadoException e) {
                 throw e;
             } catch (Exception e) {
-                throw new NoAutorizadoException("Token inválido o expirado. ", e);
+                throw new NoAutorizadoException("Token inválido o expirado.", e);
             }
         });
 
         // ── Endpoints de roles y permisos ────────────────────────────
-        app.get("/api/roles ", ctx -> rolCtrl.listarRoles(ctx));
-        app.post("/api/roles ", ctx -> rolCtrl.crearRol(ctx));
-        app.delete("/api/roles/{nombre} ", ctx -> rolCtrl.eliminarRol(ctx));
-        app.get("/api/roles/{nombre}/permisos ", ctx -> rolCtrl.obtenerPermisos(ctx));
-        app.put("/api/roles/{nombre}/permisos ", ctx -> rolCtrl.guardarPermiso(ctx));
+        app.get("/api/roles", ctx -> rolCtrl.listarRoles(ctx));
+        app.post("/api/roles", ctx -> rolCtrl.crearRol(ctx));
+        app.delete("/api/roles/{nombre}", ctx -> rolCtrl.eliminarRol(ctx));
+        app.get("/api/roles/{nombre}/permisos", ctx -> rolCtrl.obtenerPermisos(ctx));
+        app.put("/api/roles/{nombre}/permisos", ctx -> rolCtrl.guardarPermiso(ctx));
 
         // ── Endpoints de logs (solo admin) ───────────────────────────
-        app.get("/api/logs ", ctx -> logCtrl.listar(ctx));
-        app.post("/api/logs ", ctx -> logCtrl.registrar(ctx));
+        app.get("/api/logs", ctx -> logCtrl.listar(ctx));
+        app.post("/api/logs", ctx -> logCtrl.registrar(ctx));
 
         // ── Endpoints de metadatos ──────────────
         // Crear tablas
-        app.post("/api/metadata/tablas ", ctx -> metaCtrl.crearTabla(ctx));
+        app.post("/api/metadata/tablas", ctx -> metaCtrl.crearTabla(ctx));
         // Obtener metadatos (lista de nombres) de todas las tablas
-        app.get("/api/metadata/tablas ", ctx -> metaCtrl.listarTablas(ctx));
+        app.get("/api/metadata/tablas", ctx -> metaCtrl.listarTablas(ctx));
         // Obtener los metadatos de una tabla
-        app.get("/api/metadata/tablas/{tabla} ", ctx -> metaCtrl.obtenerEstructuraTabla(ctx));
+        app.get("/api/metadata/tablas/{tabla}", ctx -> metaCtrl.obtenerEstructuraTabla(ctx));
         // Eliminar una tabla
-        app.delete("/api/metadata/tablas/{tabla} ", ctx -> metaCtrl.eliminarTabla(ctx));
+        app.delete("/api/metadata/tablas/{tabla}", ctx -> metaCtrl.eliminarTabla(ctx));
         // Añadir columnas a una tabla
-        app.post("/api/metadata/tablas/{tabla}/columnas ", ctx -> metaCtrl.agregarColumna(ctx));
+        app.post("/api/metadata/tablas/{tabla}/columnas", ctx -> metaCtrl.agregarColumna(ctx));
         // Modificar las columnas de una tabla
-        app.put("/api/metadata/tablas/{tabla}/columnas/{columna} ", ctx -> metaCtrl.modificarColumna(ctx));
+        app.put("/api/metadata/tablas/{tabla}/columnas/{columna}", ctx -> metaCtrl.modificarColumna(ctx));
         // Renombrar una columna
-        app.put("/api/metadata/tablas/{tabla}/columnas/{columna}/nombre ", ctx -> metaCtrl.renombrarColumna(ctx));
+        app.put("/api/metadata/tablas/{tabla}/columnas/{columna}/nombre", ctx -> metaCtrl.renombrarColumna(ctx));
         // Eliminar columnas de una tabla
-        app.delete("/api/metadata/tablas/{tabla}/columnas/{columna} ", ctx -> metaCtrl.eliminarColumna(ctx));
+        app.delete("/api/metadata/tablas/{tabla}/columnas/{columna}", ctx -> metaCtrl.eliminarColumna(ctx));
 
         // ── Endpoints de autenticación ───────────────────────────────
-        app.post("/api/auth/login ", ctx -> authCtrl.login(ctx));
-        app.post("/api/auth/refresh ", ctx -> authCtrl.refresh(ctx));
+        app.post("/api/auth/login", ctx -> authCtrl.login(ctx));
+        app.post("/api/auth/refresh", ctx -> authCtrl.refresh(ctx));
 
         // ── Endpoints de configuración ERP ───────────────────────────
-        app.get("/api/erp/config ", ctx -> configCtrl.getConfig(ctx));
-        app.put("/api/erp/config ", ctx -> configCtrl.updateConfig(ctx));
+        app.get("/api/erp/config", ctx -> configCtrl.getConfig(ctx));
+        app.put("/api/erp/config", ctx -> configCtrl.updateConfig(ctx));
 
         // ── Endpoints de módulos ─────────────────────────────────────
-        app.get("/api/erp/modulos ", ctx -> moduloCtrl.getAll(ctx));
-        app.post("/api/erp/modulos ", ctx -> moduloCtrl.create(ctx));
-        app.delete("/api/erp/modulos/{id} ", ctx -> moduloCtrl.delete(ctx));
+        app.get("/api/erp/modulos", ctx -> moduloCtrl.getAll(ctx));
+        app.post("/api/erp/modulos", ctx -> moduloCtrl.create(ctx));
+        app.delete("/api/erp/modulos/{id}", ctx -> moduloCtrl.delete(ctx));
 
         // ── Endpoints de administración de BD ────────────────────────
-        app.get("/api/admin/bd ", ctx -> adminBdCtrl.listarBDs(ctx));
-        app.post("/api/admin/bd ", ctx -> adminBdCtrl.crearBD(ctx));
-        app.delete("/api/admin/bd/{nombre} ", ctx -> adminBdCtrl.borrarBD(ctx));
-        app.get("/api/admin/bd/{nombre}/tablas ", ctx -> adminBdCtrl.listarTablas(ctx));
-        app.post("/api/admin/bd/{nombre}/tablas ", ctx -> adminBdCtrl.crearTabla(ctx));
-        app.delete("/api/admin/bd/{nombre}/tablas/{tabla} ", ctx -> adminBdCtrl.borrarTabla(ctx));
-        app.get("/api/admin/bd/{nombre}/tablas/{tabla}/estructura ", ctx -> adminBdCtrl.describirTabla(ctx));
-        app.get("/api/admin/bd/{nombre}/tablas/{tabla}/datos ", ctx -> adminBdCtrl.leerDatos(ctx));
-        app.post("/api/admin/bd/{nombre}/tablas/{tabla}/datos ", ctx -> adminBdCtrl.insertarRegistro(ctx));
-        app.post("/api/admin/bd/{nombre}/backup ", ctx -> adminBdCtrl.crearBackup(ctx));
-        app.get("/api/admin/bd/conexion ", ctx -> adminBdCtrl.probarConexion(ctx));
+        app.get("/api/admin/bd", ctx -> adminBdCtrl.listarBDs(ctx));
+        app.post("/api/admin/bd", ctx -> adminBdCtrl.crearBD(ctx));
+        app.delete("/api/admin/bd/{nombre}", ctx -> adminBdCtrl.borrarBD(ctx));
+        app.get("/api/admin/bd/{nombre}/tablas", ctx -> adminBdCtrl.listarTablas(ctx));
+        app.post("/api/admin/bd/{nombre}/tablas", ctx -> adminBdCtrl.crearTabla(ctx));
+        app.delete("/api/admin/bd/{nombre}/tablas/{tabla}", ctx -> adminBdCtrl.borrarTabla(ctx));
+        app.get("/api/admin/bd/{nombre}/tablas/{tabla}/estructura", ctx -> adminBdCtrl.describirTabla(ctx));
+        app.get("/api/admin/bd/{nombre}/tablas/{tabla}/datos", ctx -> adminBdCtrl.leerDatos(ctx));
+        app.post("/api/admin/bd/{nombre}/tablas/{tabla}/datos", ctx -> adminBdCtrl.insertarRegistro(ctx));
+        app.post("/api/admin/bd/{nombre}/backup", ctx -> adminBdCtrl.crearBackup(ctx));
+        app.get("/api/admin/bd/conexion", ctx -> adminBdCtrl.probarConexion(ctx));
 
         // ── Endpoints CRUD transaccionales ─────────────────────────────────────
-        app.post("/api/batch/insert ", ctx -> baseCtrl.insertTransaccional(ctx));
-        app.put("/api/batch/update ", ctx -> baseCtrl.updateTransaccional(ctx));
-        app.delete("/api/batch/delete ", ctx -> baseCtrl.deleteTransaccional(ctx));
+        app.post("/api/batch/insert", ctx -> baseCtrl.insertTransaccional(ctx));
+        app.put("/api/batch/update", ctx -> baseCtrl.updateTransaccional(ctx));
+        app.delete("/api/batch/delete", ctx -> baseCtrl.deleteTransaccional(ctx));
 
         // NUEVO: Endpoints de ficheros ─────────────────────────────────
         // Deben ir ANTES de los CRUD genéricos para que /api/ficheros no sea
@@ -254,7 +260,7 @@ public class ApiGenerica {
             fs.guardar(uuid, ctx.pathParam("tabla"), file);
             // Releer metadatos de db4o para incluir el tipoDetectado en la respuesta
             apigenerica.model.Fichero meta = fs.obtenerMetadatos(uuid);
-            Map resp = new LinkedHashMap<>();
+            Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("uuid", uuid);
             resp.put("tipoDetectado", meta != null && meta.getTipoDetectado() != null
                     ? meta.getTipoDetectado() : "");
@@ -265,8 +271,9 @@ public class ApiGenerica {
         // Muestra uuid, nombre, tipo detectado, peso, si está en disco o db4o, y fecha.
         app.get("/api/ficheros", ctx -> {
             List<Map<String, Object>> lista = new ArrayList<>();
-            try (Connection conn = ConexionMysql.getConexion(); Statement st = conn.createStatement(); ResultSet rs = st.executeQuery(
-                    "SELECT * FROM erp_sistema.erp_ficheros ORDER BY fecha_subida DESC")) {
+            try (Connection conn = ConexionMysql.getConexion();
+                 Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT * FROM erp_sistema.erp_ficheros ORDER BY fecha_subida DESC")) {
                 while (rs.next()) {
                     Map<String, Object> row = new LinkedHashMap<>();
                     row.put("uuid", rs.getString("uuid"));
@@ -313,11 +320,11 @@ public class ApiGenerica {
 
         // ── Endpoints CRUD genéricos (cualquier tabla) ───────────────
         // IMPORTANTE: Van al final para no interceptar las rutas específicas
-        app.get("/api/{tabla} ", ctx -> baseCtrl.fetchTodo(ctx));
-        app.get("/api/{tabla}/{id} ", ctx -> baseCtrl.fetchPorId(ctx));
-        app.post("/api/{tabla} ", ctx -> baseCtrl.insert(ctx));
-        app.put("/api/{tabla}/{id} ", ctx -> baseCtrl.update(ctx));
-        app.delete("/api/{tabla}/{id} ", ctx -> baseCtrl.delete(ctx));
+        app.get("/api/{tabla}", ctx -> baseCtrl.fetchTodo(ctx));
+        app.get("/api/{tabla}/{id}", ctx -> baseCtrl.fetchPorId(ctx));
+        app.post("/api/{tabla}", ctx -> baseCtrl.insert(ctx));
+        app.put("/api/{tabla}/{id}", ctx -> baseCtrl.update(ctx));
+        app.delete("/api/{tabla}/{id}", ctx -> baseCtrl.delete(ctx));
 
         // ── Manejo global de excepciones ─────────────────────────────
         app.exception(ValidacionException.class, (e, ctx)
@@ -333,9 +340,9 @@ public class ApiGenerica {
                 -> ctx.status(500).json(ApiRespuesta.error(e.getMessage())));
 
         app.exception(Exception.class, (e, ctx) -> {
-            System.err.println("Error no controlado:  " + e.getMessage());
+            System.err.println("Error no controlado: " + e.getMessage());
             e.printStackTrace();
-            ctx.status(500).json(ApiRespuesta.error("Error interno del servidor. "));
+            ctx.status(500).json(ApiRespuesta.error("Error interno del servidor."));
         });
 
         // ── Shutdown hook ────────────────────────────────────────────
@@ -343,12 +350,12 @@ public class ApiGenerica {
             LogService.detener();
             ConexionMysql.cerrar();
             ConexionParadox.cerrar();
-            System.out.println("[API] Conexiones cerradas correctamente. ");
+            System.out.println("[API] Conexiones cerradas correctamente.");
         }));
 
-        System.out.println("=========================================== ");
-        System.out.println("  API ERP Genérica arrancada en :7000 ");
-        System.out.println("=========================================== ");
+        System.out.println("===========================================");
+        System.out.println("  API ERP Genérica arrancada en :7000");
+        System.out.println("===========================================");
     }
 
     /**
@@ -357,29 +364,29 @@ public class ApiGenerica {
      * bien la JVM anterior. Solo funciona en Windows (usa netstat + taskkill).
      */
     private static void limpiarPuertoYProcesos(int puerto) {
-        System.out.println("[API] Comprobando si el puerto  " + puerto + " esta libre... ");
+        System.out.println("[API] Comprobando si el puerto " + puerto + " esta libre...");
         try {
-            Process netstat = new ProcessBuilder("netstat ", "-ano ")
+            Process netstat = new ProcessBuilder("netstat", "-ano")
                     .redirectErrorStream(true)
                     .start();
             java.io.BufferedReader reader = new java.io.BufferedReader(
                     new java.io.InputStreamReader(netstat.getInputStream()));
             String linea;
-            String patron = ": " + puerto + "  ";
+            String patron = ":" + puerto;
             while ((linea = reader.readLine()) != null) {
-                if (linea.contains(patron) && linea.contains("LISTENING ")) {
-                    String[] partes = linea.trim().split("\\s+ ");
+                if (linea.contains(patron) && linea.contains("LISTENING")) {
+                    String[] partes = linea.trim().split("\\s+");
                     String pid = partes[partes.length - 1];
-                    System.out.println("[API] Puerto  " + puerto + " ocupado por PID= " + pid + ". Terminando proceso... ");
-                    new ProcessBuilder("taskkill ", "/F ", "/PID ", pid)
+                    System.out.println("[API] Puerto " + puerto + " ocupado por PID=" + pid + ". Terminando proceso...");
+                    new ProcessBuilder("taskkill", "/F", "/PID", pid)
                             .redirectErrorStream(true).start().waitFor();
-                    System.out.println("[API] PID= " + pid + " eliminado. Puerto  " + puerto + " libre. ");
+                    System.out.println("[API] PID=" + pid + " eliminado. Puerto " + puerto + " libre.");
                     Thread.sleep(1500); // Esperar a que el SO libere el socket
                 }
             }
             netstat.waitFor();
         } catch (Exception e) {
-            System.err.println("[API] No se pudo liberar el puerto:  " + e.getMessage());
+            System.err.println("[API] No se pudo liberar el puerto: " + e.getMessage());
         }
     }
 }
