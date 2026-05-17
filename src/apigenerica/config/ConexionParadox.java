@@ -2,6 +2,7 @@ package apigenerica.config;
 
 import apigenerica.service.ColaOperaciones;
 import apigenerica.service.ParadoxCache;
+import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -16,8 +17,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * se mantiene UNA sola conexión compartida protegida por los ReentrantLock
  * que ya usan ParadoxCache y ColaOperaciones.
  *
- * Driver requerido: paradoxdriver-X.X.X.jar (añadir a lib/ y al classpath).
- * URL JDBC:        jdbc:paradox:/<ruta_al_directorio_que_contiene_los_DB>
+ * Driver requerido: Paradox_JDBC30.jar (HXTT).
+ * URL JDBC:        jdbc:paradox:///<ruta_al_directorio_que_contiene_los_DB>
  *
  * @author Grupo1
  */
@@ -45,23 +46,21 @@ public class ConexionParadox {
      * Abre la conexión JDBC con Paradox y construye los servicios dependientes
      * (ParadoxCache y ColaOperaciones).
      *
+     * Si el directorio paradox_data no existe, lo crea automáticamente.
+     *
      * Llama a este método UNA SOLA VEZ al arrancar la API, después de
      * ConexionMysql.inicializar() y antes de crear los controladores.
-     *
-     * Ejemplo en ApiGenerica.main():
-     * <pre>
-     *   ConexionMysql.inicializar();
-     *   ConexionParadox.inicializar();       // ← añadir esta línea
-     * </pre>
      */
     public static synchronized void inicializar() {
         try {
-            // Cargar el driver explícitamente (necesario en Java 8 sin ServiceLoader)
-            Class.forName("com.googlecode.paradox.Driver");
+            // Crear el directorio si no existe
+            crearDirectorioSiNoExiste();
 
-            // Abrir conexión: jdbc:paradox:/<ruta>
-            // La barra inicial es obligatoria en la URL del driver paradoxdriver.
-            String url = "jdbc:paradox:/" + RUTA_PARADOX;
+            // Cargar el driver HXTT Paradox explícitamente
+            Class.forName("com.hxtt.sql.paradox.ParadoxDriver");
+
+            // Abrir conexión: jdbc:paradox:///<ruta>
+            String url = "jdbc:paradox:///" + RUTA_PARADOX;
             conexion = DriverManager.getConnection(url);
             conexion.setAutoCommit(false);
             contadorQueries.set(0);
@@ -74,12 +73,33 @@ public class ConexionParadox {
 
         } catch (ClassNotFoundException e) {
             System.err.println("[Paradox] Driver no encontrado. " +
-                "Asegurate de incluir paradoxdriver-X.X.X.jar en lib/ y en el classpath.");
+                "Asegurate de incluir Paradox_JDBC30.jar en lib/ y en el classpath.");
             throw new RuntimeException("Driver Paradox no disponible", e);
 
         } catch (SQLException e) {
             System.err.println("[Paradox] Error al conectar: " + e.getMessage());
             throw new RuntimeException("No se pudo conectar a Paradox", e);
+        }
+    }
+
+    /**
+     * Crea el directorio de datos de Paradox si no existe.
+     * No hace nada si ya existe.
+     */
+    private static void crearDirectorioSiNoExiste() {
+        File dir = new File(RUTA_PARADOX);
+        if (!dir.exists()) {
+            boolean creado = dir.mkdirs();
+            if (creado) {
+                System.out.println("[Paradox] Directorio creado automaticamente: "
+                        + dir.getAbsolutePath());
+            } else {
+                System.err.println("[Paradox] No se pudo crear el directorio: "
+                        + dir.getAbsolutePath()
+                        + ". Comprueba los permisos.");
+            }
+        } else {
+            System.out.println("[Paradox] Directorio encontrado: " + dir.getAbsolutePath());
         }
     }
 
@@ -176,12 +196,14 @@ public class ConexionParadox {
             conexion = null;
         }
         try {
-            Class.forName("com.googlecode.paradox.Driver");
+            Class.forName("com.hxtt.sql.paradox.ParadoxDriver");
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("[ConexionParadox] Driver Paradox no encontrado: " + e.getMessage(), e);
         }
         try {
-            String url = "jdbc:paradox:/" + RUTA_PARADOX;
+            // Asegurarse de que el directorio sigue existiendo al renovar
+            crearDirectorioSiNoExiste();
+            String url = "jdbc:paradox:///" + RUTA_PARADOX;
             conexion = DriverManager.getConnection(url);
             conexion.setAutoCommit(false);
             contadorQueries.set(0);
