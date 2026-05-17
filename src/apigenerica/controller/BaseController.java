@@ -22,6 +22,7 @@ import apigenerica.service.ValidadorService;
 import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import io.javalin.http.UploadedFile;
+import logs.service.LogService;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -35,14 +36,15 @@ import java.util.UUID;
 /**
  * Controlador genérico CRUD para cualquier tabla de la base de datos.
  * Usa los metadatos almacenados en MySQL para mapear los resultados dinámicamente.
- * 
+ *
  * Características:
  * - CRUD completo con soporte para filtros, paginación y ordenación
  * - Soporte para relaciones (JOINs) mediante parámetro "include"
  * - Gestión de archivos (db4o o disco) para columnas tipo ARCHIVO
  * - Datos sensibles cifrados en Paradox (separados de MySQL)
  * - Operaciones transaccionales batch para múltiples tablas
- * 
+ * - Registro de auditoría mediante LogService
+ *
  * @author Grupo1
  */
 public class BaseController {
@@ -66,8 +68,8 @@ public class BaseController {
      * @param cifrado Servicio para cifrado de datos sensibles
      */
     public BaseController(ValidadorService validador, MetaService metaService,
-                          BaseDao baseDao, MetaDao metaDao, OrderService orderService,
-                          FicheroService ficheroService, ServicioCifrado cifrado) {
+            BaseDao baseDao, MetaDao metaDao, OrderService orderService,
+            FicheroService ficheroService, ServicioCifrado cifrado) {
         this.validador = validador;
         this.metaService = metaService;
         this.baseDao = baseDao;
@@ -84,18 +86,18 @@ public class BaseController {
     /**
      * Endpoint: GET /api/{tabla}
      * Obtiene una lista paginada de registros de una tabla.
-     * 
+     *
      * Parámetros de consulta soportados:
      * - Filtros: ?campo=valor o ?campo__gt=valor (gt, lt, gte, lte, contains)
      * - Paginación: ?limit=20&offset=0
      * - Ordenación: ?sort=nombre&order=ASC
      * - Relaciones: ?include=tabla1,tabla2 (para JOINs)
-     * 
+     *
      * Headers de respuesta:
      * - X-Total-Count: Total de registros (sin paginar)
      * - X-Total-Pages: Total de páginas
      * - X-Current-Page: Página actual
-     * 
+     *
      * @param ctx Contexto de la petición HTTP
      */
     public void fetchTodo(Context ctx) {
@@ -121,7 +123,7 @@ public class BaseController {
 
         // ── Cargar metadatos de la tabla ─────────────────────────────
         TablaConfig config = metaService.getConfiguracion(tabla);
-        List<ColumnaConfig> columnas = config.getColumnas() != null 
+        List<ColumnaConfig> columnas = config.getColumnas() != null
                 ? config.getColumnas() : new ArrayList<>();
 
         // Procesar relaciones (JOINs) si se solicitan
@@ -132,7 +134,7 @@ public class BaseController {
             // Calcular paginación para headers
             long totalRegistros = baseDao.contarRegistros(conn, tabla, filtros);
             int totalPaginas = (int) Math.ceil((double) totalRegistros / limite);
-            
+
             ctx.header("X-Total-Count", String.valueOf(totalRegistros));
             ctx.header("X-Total-Pages", String.valueOf(totalPaginas));
             ctx.header("X-Current-Page", String.valueOf((offset / limite) + 1));
@@ -170,18 +172,18 @@ public class BaseController {
     /**
      * Endpoint: GET /api/{tabla}/{id}
      * Obtiene un registro específico por su ID, con soporte para relaciones.
-     * 
+     *
      * @param ctx Contexto de la petición HTTP
      */
     public void fetchPorId(Context ctx) {
         String tabla = ctx.pathParam("tabla");
         Long id = ctx.pathParamAsClass("id", Long.class).get();
         String includes = ctx.queryParam("include");
-        
+
         validador.validarNombre(tabla);
 
         TablaConfig config = metaService.getConfiguracion(tabla);
-        List<ColumnaConfig> columnas = config.getColumnas() != null 
+        List<ColumnaConfig> columnas = config.getColumnas() != null
                 ? config.getColumnas() : new ArrayList<>();
 
         List<RelacionConfig> relaciones = metaService.getRelaciones(tabla, includes);
@@ -220,13 +222,14 @@ public class BaseController {
     /**
      * Endpoint: POST /api/{tabla}
      * Inserta un nuevo registro en la tabla especificada.
-     * 
+     *
      * Soporta:
      * - JSON o multipart/form-data (para archivos)
      * - Columnas tipo ARCHIVO: se guardan en db4o o disco, UUID en MySQL
      * - Columnas tipo SENSIBLE: se cifran y guardan en Paradox
      * - Conversión automática de tipos de dato
-     * 
+     * - Registro de auditoría en LogService
+     *
      * @param ctx Contexto de la petición HTTP
      */
     @SuppressWarnings("unchecked")
@@ -251,15 +254,19 @@ public class BaseController {
         try (Connection conn = ConexionMysql.getConexion(AppConfig.DB_CLIENTE)) {
             // Procesar archivos primero (antes de insertar en MySQL)
             procesarFicheros(ctx, tabla, entidad, uuids, config.getColumnas());
-            
+
             // Guardar datos sensibles en Paradox (separado de MySQL)
             guardarSensibles(entidad, config.getColumnas(), config.getId(), null);
-            
+
             // Insertar en MySQL
             long id = baseDao.insertar(conn, tabla, entidad);
-            
+
             // Actualizar PK en datos sensibles si usamos "PENDING"
             actualizarPkSensibles(config.getId(), id);
+
+            // Registrar log de auditoría
+            String usuario = obtenerUsuarioCtx(ctx);
+            LogService.registrar(usuario, "INSERT", tabla, "Registro insertado con id=" + id);
 
             // Respuesta con el ID generado
             EntidadDinamica respuesta = new EntidadDinamica();
@@ -276,7 +283,7 @@ public class BaseController {
     /**
      * Endpoint: POST /api/batch/insert
      * Inserta registros en múltiples tablas en una sola transacción.
-     * 
+     *
      * Body esperado:
      * {
      *   "datos": {
@@ -284,16 +291,17 @@ public class BaseController {
      *     "pedidos": { "fecha": "2024-01-01", "cliente_id": null }
      *   }
      * }
-     * 
+     *
      * El servicio OrderService ordena las tablas para respetar dependencias FK.
-     * 
+     * Incluye registro de auditoría en LogService.
+     *
      * @param ctx Contexto de la petición HTTP
      */
     @SuppressWarnings("unchecked")
     public void insertTransaccional(Context ctx) {
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Map<String, Object> datos = (Map<String, Object>) body.get("datos");
-        
+
         if (datos == null) {
             throw new ValidacionException("El campo 'datos' es obligatorio.");
         }
@@ -328,9 +336,14 @@ public class BaseController {
                 Map<String, Long> idsGenerados = baseDao.insertarTransaccional(
                         conn, orden, datosPorTabla, relaciones);
                 conn.commit();
-                
+
+                // Registrar log de auditoría
+                String usuario = obtenerUsuarioCtx(ctx);
+                LogService.registrar(usuario, "INSERT", String.join(",", orden),
+                        "Insert transaccional en tablas: " + orden + " ids=" + idsGenerados);
+
                 ctx.status(HttpCode.CREATED).json(ApiRespuesta.ok(idsGenerados));
-                
+
             } catch (Exception e) {
                 conn.rollback();
                 limpiarFicheros(uuids);
@@ -349,11 +362,12 @@ public class BaseController {
     /**
      * Endpoint: PUT /api/{tabla}/{id}
      * Actualiza un registro existente.
-     * 
+     *
      * - Solo actualiza los campos enviados en el body (partial update)
      * - Gestiona archivos: nuevos se suben, antiguos se mantienen
      * - Actualiza datos sensibles en Paradox si corresponde
-     * 
+     * - Registro de auditoría en LogService
+     *
      * @param ctx Contexto de la petición HTTP
      */
     @SuppressWarnings("unchecked")
@@ -379,12 +393,16 @@ public class BaseController {
         try (Connection conn = ConexionMysql.getConexion(AppConfig.DB_CLIENTE)) {
             procesarFicheros(ctx, tabla, entidad, uuids, config.getColumnas());
             guardarSensibles(entidad, config.getColumnas(), config.getId(), id);
-            
+
             int filas = baseDao.actualizar(conn, tabla, entidad, id);
             if (filas == 0) {
                 throw new RecursoNoEncontradoException("No se encontró registro con ID: " + id);
             }
-            
+
+            // Registrar log de auditoría
+            String usuario = obtenerUsuarioCtx(ctx);
+            LogService.registrar(usuario, "UPDATE", tabla, "Registro actualizado id=" + id);
+
             ctx.status(HttpCode.OK).json(ApiRespuesta.ok("Registro actualizado correctamente."));
 
         } catch (SQLException e) {
@@ -396,14 +414,14 @@ public class BaseController {
     /**
      * Endpoint: PUT /api/batch/update
      * Actualiza registros en múltiples tablas en una transacción.
-     * 
+     *
      * @param ctx Contexto de la petición HTTP
      */
     @SuppressWarnings("unchecked")
     public void updateTransaccional(Context ctx) {
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Number idRaw = (Number) body.get("id");
-        
+
         if (idRaw == null) {
             throw new ValidacionException("El campo 'id' es obligatorio para update batch.");
         }
@@ -456,7 +474,8 @@ public class BaseController {
     /**
      * Endpoint: DELETE /api/{tabla}/{id}
      * Elimina un registro y limpia sus datos sensibles asociados.
-     * 
+     * Incluye registro de auditoría en LogService.
+     *
      * @param ctx Contexto de la petición HTTP
      */
     public void delete(Context ctx) {
@@ -472,12 +491,16 @@ public class BaseController {
             if (filas == 0) {
                 throw new RecursoNoEncontradoException("No se encontró registro con ID: " + id);
             }
-            
+
             // Limpiar datos sensibles en Paradox
             borrarSensibles(config.getId(), id);
-            
+
+            // Registrar log de auditoría
+            String usuario = obtenerUsuarioCtx(ctx);
+            LogService.registrar(usuario, "DELETE", tabla, "Registro eliminado id=" + id);
+
             ctx.json(ApiRespuesta.ok("Registro eliminado correctamente."));
-            
+
         } catch (SQLException e) {
             throw new BaseDatosException("Error al eliminar registro.", e);
         }
@@ -486,13 +509,14 @@ public class BaseController {
     /**
      * Endpoint: DELETE /api/batch/delete
      * Elimina registros de múltiples tablas respetando dependencias FK.
-     * 
+     * Incluye registro de auditoría en LogService.
+     *
      * @param ctx Contexto de la petición HTTP
      */
     public void deleteTransaccional(Context ctx) {
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
         Number idRaw = (Number) body.get("id");
-        
+
         if (idRaw == null) {
             throw new ValidacionException("El campo 'id' es obligatorio.");
         }
@@ -505,7 +529,7 @@ public class BaseController {
 
         // Ordenar e invertir: eliminar hijos antes que padres
         List<String> orden = orderService.ordenarTablas(tablas);
-        
+
         // Validar que todas las tablas existen en metadatos
         for (String tabla : orden) {
             metaService.getConfiguracion(tabla);
@@ -519,6 +543,12 @@ public class BaseController {
                     throw new RecursoNoEncontradoException("No se encontraron registros para eliminar.");
                 }
                 conn.commit();
+                
+                // Registrar log de auditoría
+                String usuario = obtenerUsuarioCtx(ctx);
+                LogService.registrar(usuario, "DELETE", String.join(",", orden),
+                        "Delete transaccional en tablas: " + orden + " id=" + id);
+                
                 ctx.json(ApiRespuesta.ok("Se eliminaron registros en " + orden.size() + " tablas."));
             } catch (Exception e) {
                 conn.rollback();
@@ -563,7 +593,7 @@ public class BaseController {
         Map<String, List<ColumnaConfig>> colsHijas = new HashMap<>();
         for (RelacionConfig rel : relaciones) {
             TablaConfig configHija = metaService.getConfiguracion(rel.getTablaDestino());
-            List<ColumnaConfig> colHija = configHija.getColumnas() != null 
+            List<ColumnaConfig> colHija = configHija.getColumnas() != null
                     ? configHija.getColumnas() : new ArrayList<>();
             colsHijas.put(rel.getTablaDestino(), colHija);
         }
@@ -578,7 +608,7 @@ public class BaseController {
      */
     private EntidadDinamica convertirTipos(EntidadDinamica datos, List<ColumnaConfig> columnas) {
         EntidadDinamica convertidos = new EntidadDinamica();
-        
+
         for (Map.Entry<String, Object> entry : datos.getTodo().entrySet()) {
             ColumnaConfig conf = null;
             for (ColumnaConfig c : columnas) {
@@ -610,8 +640,8 @@ public class BaseController {
      * @param uuidsNuevos Lista para tracking de archivos (rollback en caso de error)
      * @param columnas Metadatos para identificar columnas tipo ARCHIVO
      */
-    private void procesarFicheros(Context ctx, String tabla, EntidadDinamica entidad, 
-                                  List<String> uuidsNuevos, List<ColumnaConfig> columnas) {
+    private void procesarFicheros(Context ctx, String tabla, EntidadDinamica entidad,
+            List<String> uuidsNuevos, List<ColumnaConfig> columnas) {
         for (ColumnaConfig col : columnas) {
             if (col.isArchivo()) {
                 UploadedFile file = ctx.uploadedFile(col.getNombre());
@@ -645,17 +675,17 @@ public class BaseController {
         try {
             for (ColumnaConfig col : columnas) {
                 if (!col.isSensible()) continue;
-                
+
                 String pk = String.valueOf(entidad.getId());
                 String sql = "SELECT valor FROM paradox_sensibles WHERE tabla_id=? AND columna_id=? AND pk=?";
-                
+
                 try (PreparedStatement ps = ConexionParadox.getConexion().prepareStatement(sql)) {
                     ps.setLong(1, tablaId);
                     ps.setLong(2, col.getId());
                     ps.setString(3, pk);
                     ResultSet rs = ps.executeQuery();
                     ConexionParadox.contarUso();
-                    
+
                     if (rs.next()) {
                         // Desencriptar antes de devolver al cliente
                         entidad.set(col.getNombre(), cifrado.desencriptar(rs.getString("valor")));
@@ -674,15 +704,15 @@ public class BaseController {
      * @param tablaId ID de la tabla en erp_meta_tablas
      * @param pkExistente ID del registro (null si es INSERT nuevo)
      */
-    private void guardarSensibles(EntidadDinamica entidad, List<ColumnaConfig> columnas, 
-                                  long tablaId, Long pkExistente) {
+    private void guardarSensibles(EntidadDinamica entidad, List<ColumnaConfig> columnas,
+            long tablaId, Long pkExistente) {
         try {
             for (ColumnaConfig col : columnas) {
                 if (!col.isSensible()) continue;
-                
+
                 Object val = entidad.get(col.getNombre());
                 if (val == null) continue;
-                
+
                 String enc = cifrado.encriptar(val.toString());
                 String sql = pkExistente == null
                         ? "INSERT INTO paradox_sensibles (tabla_id, columna_id, pk, valor) VALUES (?,?,?,?)"
@@ -697,7 +727,7 @@ public class BaseController {
                     ConexionParadox.getConexion().commit();
                     ConexionParadox.contarUso();
                 }
-                
+
                 // Remover de la entidad: no va a MySQL, solo a Paradox
                 entidad.getTodo().remove(col.getNombre());
             }
@@ -754,7 +784,7 @@ public class BaseController {
      */
     private void aplicarFiltroPrivacidadEntidad(EntidadDinamica entidad, List<ColumnaConfig> configs) {
         if (entidad == null || configs == null) return;
-        
+
         configs.stream()
                 .filter(c -> c.isContrasena() || !c.isVisible())
                 .forEach(c -> entidad.getTodo().remove(c.getNombre()));
@@ -768,5 +798,20 @@ public class BaseController {
     private void aplicarFiltroPrivacidadLista(List<EntidadDinamica> entidades, List<ColumnaConfig> configs) {
         if (entidades == null) return;
         entidades.forEach(e -> aplicarFiltroPrivacidadEntidad(e, configs));
+    }
+
+    /**
+     * Extrae el nombre o ID del usuario autenticado del contexto Javalin.
+     * El before() de ApiGenerica inyecta "usuarioId" como atributo.
+     * @param ctx Contexto HTTP de Javalin
+     * @return Identificador del usuario en formato "usuario#ID" o "api" por defecto
+     */
+    private String obtenerUsuarioCtx(Context ctx) {
+        try {
+            Object id = ctx.attribute("usuarioId");
+            return id != null ? "usuario#" + id : "api";
+        } catch (Exception e) {
+            return "api";
+        }
     }
 }

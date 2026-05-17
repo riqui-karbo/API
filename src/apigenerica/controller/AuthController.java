@@ -39,22 +39,18 @@ public class AuthController {
         Map<String, String> credenciales = ctx.bodyAsClass(Map.class);
         String email = credenciales.get("email");
         String password = credenciales.get("password");
-
         if (email == null || email.trim().isEmpty() || password == null || password.trim().isEmpty()) {
             ctx.status(HttpCode.BAD_REQUEST).json(ApiRespuesta.error("Email y contraseña son requeridos."));
             return;
         }
-
         EntidadDinamica login = usuarioDao.obtenerDatosLogin(email);
-
-        System.out.println("[DEBUG AuthController] Email recibido: '" + email + "'");
-        System.out.println("[DEBUG AuthController] Password recibido: '" + password + "'");
+        System.out.println("[DEBUG AuthController] Email recibido: ' " + email + "' ");
+        System.out.println("[DEBUG AuthController] Password recibido: ' " + password + "' ");
         if (login != null) {
-            String hashBd = (String) login.get("hash");
-            System.out.println("[DEBUG AuthController] Hash en BD: '" + hashBd + "'");
+            String hashBd = (String) login.get("hash ");
+            System.out.println("[DEBUG AuthController] Hash en BD: ' " + hashBd + "' ");
             boolean pwdMatch = BCrypt.checkpw(password, hashBd);
-            System.out.println("[DEBUG AuthController] Match BCrypt: " + pwdMatch);
-            
+            System.out.println("[DEBUG AuthController] Match BCrypt:  " + pwdMatch);
             // Si la app usa 123456 como contraseña universal y el hash no matchea, forzar el login para arreglarlo
             if (!pwdMatch && "123456".equals(password)) {
                 System.out.println("[DEBUG AuthController] Forzando login exitoso porque es la contraseña universal (el hash original falló).");
@@ -73,8 +69,7 @@ public class AuthController {
         } else {
             System.out.println("[DEBUG AuthController] No se encontro el usuario en BD para el email: " + email);
         }
-
-        // Contraseña incorrecta o no se encontró el email en la base de datos
+// Contraseña incorrecta o no se encontró el email en la base de datos
         ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Credenciales incorrectas."));
     }
 
@@ -88,26 +83,25 @@ public class AuthController {
         try {
             Map<String, String> body = ctx.bodyAsClass(Map.class);
             String refreshToken = body.get("refreshToken");
-
             if (refreshToken == null || refreshToken.trim().isEmpty()) {
-                ctx.status(HttpCode.BAD_REQUEST).json(ApiRespuesta.error("Refresh token requerido."));
+                ctx.status(HttpCode.BAD_REQUEST).json(ApiRespuesta.error("Refresh token requerido. "));
                 return;
             }
             // Verificar si el token es válido
             DecodedJWT jwt = jwtService.verificarToken(refreshToken);
 
-            String tipo = jwt.getClaim("tipo").asString();
-            if (!"refresh".equals(tipo)) {
-                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Token inválido."));
+            String tipo = jwt.getClaim("tipo ").asString();
+            if (!"refresh ".equals(tipo)) {
+                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Token inválido. "));
                 return;
             }
 
-            Long usuarioId = jwt.getClaim("id").asLong();
+            Long usuarioId = jwt.getClaim("id ").asLong();
 
             // Buscar rol del usuario
             String rol = usuarioDao.obtenerRol(usuarioId);
             if (rol == null) {
-                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Usuario inválido o inactivo."));
+                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Usuario inválido o inactivo. "));
                 return;
             }
 
@@ -116,18 +110,18 @@ public class AuthController {
             String nuevoRefresh = jwtService.generarRefreshToken(usuarioId);
 
             Map<String, String> respuesta = new HashMap<>();
-            respuesta.put("access_token", nuevoAccess);
-            respuesta.put("refresh_token", nuevoRefresh);
+            respuesta.put("access_token ", nuevoAccess);
+            respuesta.put("refresh_token ", nuevoRefresh);
             ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
         } catch (JWTVerificationException e) {
             ctx.status(401).json(ApiRespuesta.error("Refresh token expirado o inválido."));
         }
     }
-    
+
     /**
      * Registrar cuenta de usuario en la base de datos
-     * 
-     * @param ctx 
+     *
+     * @param ctx
      */
     public void registrar(Context ctx) {
         Map<String, String> datosUsuario = ctx.bodyAsClass(Map.class);
