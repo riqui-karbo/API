@@ -12,12 +12,12 @@ import java.util.*;
  * y los registra en LogDAO.
  *
  * ── Capa 1: tablas de metadatos (siempre vigiladas) ──────────────────────────
- * sys_databases, sys_tables, sys_columns, sys_users, sys_api_keys
+ * erp_meta_tablas, erp_modulos, erp_meta_columnas, erp_users, erp_roles
  * Snapshot: Map<id, Map<campo,valor>>
  * Detecta: INSERT / UPDATE (campo a campo) / DELETE
  *
  * ── Capa 2: tablas de usuario (se descubren dinámicamente) ───────────────────
- * Cualquier tabla física de db_metadatos que NO empiece por "sys_"
+ * Cualquier tabla física de db_metadatos que NO empiece por "erp_"
  * Al arrancar y en cada ciclo se escanea INFORMATION_SCHEMA para descubrir
  * tablas nuevas y añadirlas al seguimiento sin reiniciar la app.
  */
@@ -81,11 +81,11 @@ public class DatabaseChangeMonitor implements Runnable {
     private void cargarSnapshotInicial() throws SQLException {
         Connection con = ConexionMysql.getConexion(AppConfig.DB_CLIENTE);
         try {
-            snapMeta.put("sys_databases", leerTablaGeneral(con, "sys_databases", "id_db"));
-            snapMeta.put("sys_tables",    leerTablaGeneral(con, "sys_tables",    "id_tabla"));
-            snapMeta.put("sys_columns",   leerTablaGeneral(con, "sys_columns",   "id_columna"));
-            snapMeta.put("sys_users",     leerTablaGeneral(con, "sys_users",     "id"));
-            snapMeta.put("sys_api_keys",  leerTablaGeneral(con, "sys_api_keys",  "id_api_key"));
+            snapMeta.put("erp_meta_tablas", leerTablaGeneral(con, "erp_meta_tablas", "id"));
+            snapMeta.put("erp_modulos",   leerTablaGeneral(con, "erp_modulos",   "id"));
+            snapMeta.put("erp_meta_columnas", leerTablaGeneral(con, "erp_meta_columnas", "id"));
+            snapMeta.put("erp_users",     leerTablaGeneral(con, "erp_users",     "id"));
+            snapMeta.put("erp_roles",     leerTablaGeneral(con, "erp_roles",     "id"));
 
             for (String tabla : descubrirTablasUsuario(con)) {
                 List<String> pks = obtenerPKs(con, tabla);
@@ -105,11 +105,11 @@ public class DatabaseChangeMonitor implements Runnable {
         try {
             // Capa 1
             Map<String, Map<Integer, Map<String, String>>> actualMeta = new LinkedHashMap<>();
-            actualMeta.put("sys_databases", leerTablaGeneral(con, "sys_databases", "id_db"));
-            actualMeta.put("sys_tables",    leerTablaGeneral(con, "sys_tables",    "id_tabla"));
-            actualMeta.put("sys_columns",   leerTablaGeneral(con, "sys_columns",   "id_columna"));
-            actualMeta.put("sys_users",     leerTablaGeneral(con, "sys_users",     "id"));
-            actualMeta.put("sys_api_keys",  leerTablaGeneral(con, "sys_api_keys",  "id_api_key"));
+            actualMeta.put("erp_meta_tablas", leerTablaGeneral(con, "erp_meta_tablas", "id"));
+            actualMeta.put("erp_modulos",   leerTablaGeneral(con, "erp_modulos",   "id"));
+            actualMeta.put("erp_meta_columnas", leerTablaGeneral(con, "erp_meta_columnas", "id"));
+            actualMeta.put("erp_users",     leerTablaGeneral(con, "erp_users",     "id"));
+            actualMeta.put("erp_roles",     leerTablaGeneral(con, "erp_roles",     "id"));
 
             for (String tabla : actualMeta.keySet()) {
                 compararMeta(tabla, snapMeta.get(tabla), actualMeta.get(tabla));
@@ -230,7 +230,7 @@ public class DatabaseChangeMonitor implements Runnable {
         Set<String> tablas = new LinkedHashSet<>();
         String sql = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES " +
                      "WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE' " +
-                     "AND TABLE_NAME NOT LIKE 'sys\\_%' ORDER BY TABLE_NAME";
+                     "AND TABLE_NAME NOT LIKE 'erp\\_%' ORDER BY TABLE_NAME";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, DB_NAME);
             try (ResultSet rs = ps.executeQuery()) {
@@ -338,15 +338,15 @@ public class DatabaseChangeMonitor implements Runnable {
 
     private String buildInsertDescMeta(String tabla, int id, Map<String, String> v) {
         switch (tabla) {
-            case "sys_databases": return "BD creada externamente: '" + v.get("nombre_db")
-                    + "' motor=" + v.get("motor") + " estado=" + v.get("estado");
-            case "sys_tables":    return "Tabla creada externamente: '" + v.get("nombre_tabla")
-                    + "' en BD '" + v.get("nombre_db") + "' motor=" + v.get("motor_tabla");
-            case "sys_columns":   return "Columna creada externamente: '" + v.get("nombre_col")
-                    + "' en tabla '" + v.get("nombre_tabla") + "' tipo=" + v.get("tipo_dato");
-            case "sys_users":     return "Usuario creado externamente: '" + v.get("nombre")
-                    + "' email=" + v.get("email") + " rol=" + v.get("rol");
-            case "sys_api_keys":  return "API Key creada externamente: '" + v.get("descripcion") + "'";
+            case "erp_meta_tablas": return "Tabla de metadatos creada externamente: '" + v.get("nombre_logico")
+                    + "' (" + v.get("nombre_amigable") + ")";
+            case "erp_modulos":   return "Modulo creado externamente: '" + v.get("nombre") + "'";
+            case "erp_meta_columnas": return "Columna creada externamente: '" + v.get("nombre")
+                    + "' tipo=" + v.get("tipo") + " nullable=" + v.get("nullable");
+            case "erp_users":     return "Usuario creado externamente: email='" + v.get("email")
+                    + "' rol=" + v.get("rol") + " activo=" + v.get("activo");
+            case "erp_roles":     return "Rol creado externamente: '" + v.get("nombre")
+                    + "' - " + v.get("descripcion");
             default:              return "Registro id=" + id + " insertado en " + tabla;
         }
     }
@@ -359,11 +359,11 @@ public class DatabaseChangeMonitor implements Runnable {
 
     private String nombreIdentificadorMeta(String tabla, Map<String, String> v) {
         switch (tabla) {
-            case "sys_databases": return nullSafe(v.get("nombre_db"));
-            case "sys_tables":    return nullSafe(v.get("nombre_tabla"));
-            case "sys_columns":   return nullSafe(v.get("nombre_col"));
-            case "sys_users":     return nullSafe(v.get("nombre"));
-            case "sys_api_keys":  return nullSafe(v.get("descripcion"));
+            case "erp_meta_tablas": return nullSafe(v.get("nombre_logico"));
+            case "erp_modulos":   return nullSafe(v.get("nombre"));
+            case "erp_meta_columnas": return nullSafe(v.get("nombre"));
+            case "erp_users":     return nullSafe(v.get("email"));
+            case "erp_roles":     return nullSafe(v.get("nombre"));
             default:              return "";
         }
     }
