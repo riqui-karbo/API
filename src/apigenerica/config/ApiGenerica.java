@@ -332,13 +332,13 @@ public class ApiGenerica {
         // es test-backup.html — son dos cosas distintas.
         // No requiere JWT — los endpoints /backup/* tampoco lo requieren.
         app.get("/test", ctx -> {
-            java.nio.file.Path ruta = java.nio.file.Paths.get("test-backup.html");
+            java.nio.file.Path ruta = java.nio.file.Paths.get("paradox-logs-diagnostico.html");
             if (java.nio.file.Files.exists(ruta)) {
                 ctx.contentType("text/html; charset=UTF-8");
                 ctx.result(new String(java.nio.file.Files.readAllBytes(ruta),
                         java.nio.charset.StandardCharsets.UTF_8));
             } else {
-                ctx.status(404).result("test-backup.html no encontrado. Colocalo en la raiz del proyecto (junto a build.xml).");
+                ctx.status(404).result("paradox-logs-diagnostico.html no encontrado. Colocalo en la raiz del proyecto (junto a build.xml).");
             }
         });
 
