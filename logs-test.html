@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Test Panel de Logs - API</title>
+    <style>
+        :root {
+            --bg-primary: #1e1e2e;
+            --bg-secondary: #2a2a3e;
+            --text-primary: #e6e6f0;
+            --text-secondary: #a6a6c0;
+            --accent: #89b4fa;
+            --success: #a6e3a1;
+            --warning: #f9e2af;
+            --error: #f38ba8;
+            --border: #45475a;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+        }
+        
+        h1 { font-size: 1.5rem; color: var(--accent); }
+        
+        .config-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .config-card {
+            background: var(--bg-secondary);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        
+        .config-card label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .config-card input, .config-card select {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+        
+        .endpoints-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .endpoint-card {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .endpoint-header {
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(137, 180, 250, 0.1);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .method {
+            font-weight: bold;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        
+        .method.get { background: var(--success); color: #1e1e2e; }
+        .method.post { background: var(--accent); color: #1e1e2e; }
+        .method.put { background: var(--warning); color: #1e1e2e; }
+        .method.delete { background: var(--error); color: #1e1e2e; }
+        
+        .endpoint-path { font-family: monospace; font-size: 0.9rem; }
+        
+        .endpoint-body {
+            padding: 15px;
+        }
+        
+        .endpoint-body input, 
+        .endpoint-body textarea {
+            width: 100%;
+            padding: 8px 12px;
+            margin: 5px 0 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .endpoint-body textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        .btn {
+            background: var(--accent);
+            color: #1e1e2e;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+        }
+        
+        .response-section {
+            margin-top: 20px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .response-header {
+            padding: 12px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(166, 227, 161, 0.1);
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .response-status {
+            font-weight: bold;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        
+        .status-2xx { background: var(--success); color: #1e1e2e; }
+        .status-4xx { background: var(--warning); color: #1e1e2e; }
+        .status-5xx { background: var(--error); color: #1e1e2e; }
+        
+        .response-body {
+            padding: 15px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+        }
+        
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .logs-table th,
+        .logs-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .logs-table th {
+            background: rgba(137, 180, 250, 0.1);
+            font-weight: 600;
+            color: var(--accent);
+        }
+        
+        .logs-table tr:hover {
+            background: rgba(137, 180, 250, 0.05);
+        }
+        
+        .log-level {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .log-level.info { background: var(--accent); color: #1e1e2e; }
+        .log-level.warn { background: var(--warning); color: #1e1e2e; }
+        .log-level.error { background: var(--error); color: #1e1e2e; }
+        .log-level.debug { background: var(--text-secondary); color: #1e1e2e; }
+        
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        
+        .tab-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            transition: all 0.2s;
+        }
+        
+        .tab-btn.active {
+            background: var(--bg-secondary);
+            color: var(--accent);
+            border-bottom: 2px solid var(--accent);
+        }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .hidden { display: none !important; }
+        
+        @media (max-width: 768px) {
+            .config-panel, .endpoints-grid {
+                grid-template-columns: 1fr;
+            }
+            header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🔍 Test Panel de Logs - API</h1>
+        <div>
+            <button class="btn btn-outline" onclick="clearAll()">🗑️ Limpiar todo</button>
+        </div>
+    </header>
+
+    <!-- Configuración -->
+    <div class="config-panel">
+        <div class="config-card">
+            <label for="baseUrl">🌐 Base URL de la API</label>
+            <input type="text" id="baseUrl" value="http://localhost:8080/api" placeholder="Ej: http://localhost:8080/api">
+        </div>
+        <div class="config-card">
+            <label for="authToken">🔑 Token de Autenticación (opcional)</label>
+            <input type="password" id="authToken" placeholder="Bearer token...">
+        </div>
+        <div class="config-card">
+            <label for="logLevel">📊 Nivel de log a filtrar</label>
+            <select id="logLevel">
+                <option value="">Todos</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO">INFO</option>
+                <option value="WARN">WARN</option>
+                <option value="ERROR">ERROR</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Pestañas -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="endpoints">🔌 Endpoints</button>
+        <button class="tab-btn" data-tab="logs-list">📋 Lista de Logs</button>
+        <button class="tab-btn" data-tab="monitor">📈 Monitor en Vivo</button>
+    </div>
+
+    <!-- Pestaña: Endpoints -->
+    <div id="endpoints" class="tab-content active">
+        <div class="endpoints-grid">
+            <!-- GET /logs -->
+            <div class="endpoint-card">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/logs</span>
+                </div>
+                <div class="endpoint-body">
+                    <input type="text" id="logs-limit" placeholder="limit (ej: 50)" value="50">
+                    <input type="text" id="logs-offset" placeholder="offset (ej: 0)" value="0">
+                    <input type="text" id="logs-search" placeholder="🔍 Buscar en mensaje...">
+                    <button class="btn" onclick="testGetLogs()">▶️ Ejecutar</button>
+                </div>
+            </div>
+
+            <!-- GET /logs/{id} -->
+            <div class="endpoint-card">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/logs/{id}</span>
+                </div>
+                <div class="endpoint-body">
+                    <input type="text" id="logId" placeholder="ID del log a consultar">
+                    <button class="btn" onclick="testGetLogById()">▶️ Ejecutar</button>
+                </div>
+            </div>
+
+            <!-- POST /logs/test -->
+            <div class="endpoint-card">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/logs/test</span>
+                </div>
+                <div class="endpoint-body">
+                    <select id="testLevel">
+                        <option value="INFO">INFO</option>
+                        <option value="DEBUG">DEBUG</option>
+                        <option value="WARN">WARN</option>
+                        <option value="ERROR">ERROR</option>
+                    </select>
+                    <input type="text" id="testMessage" placeholder="Mensaje de prueba..." value="Test desde panel de logs">
+                    <button class="btn" onclick="testGenerateLog()">▶️ Generar Log</button>
+                </div>
+            </div>
+
+            <!-- DELETE /logs -->
+            <div class="endpoint-card">
+                <div class="endpoint-header">
+                    <span class="method delete">DELETE</span>
+                    <span class="endpoint-path">/logs</span>
+                </div>
+                <div class="endpoint-body">
+                    <input type="text" id="deleteBefore" placeholder="Eliminar logs antes de (timestamp o fecha)">
+                    <input type="text" id="deleteLevel" placeholder="Nivel a eliminar (opcional)">
+                    <button class="btn" style="background: var(--error); color: white;" onclick="testDeleteLogs()">🗑️ Eliminar Logs</button>
+                </div>
+            </div>
+
+            <!-- GET /logs/stats -->
+            <div class="endpoint-card">
+                <div class="endpoint-header">
+                    <span class="method get">GET</span>
+                    <span class="endpoint-path">/logs/stats</span>
+                </div>
+                <div class="endpoint-body">
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px;">
+                        Obtiene estadísticas: conteo por nivel, rango de fechas, etc.
+                    </p>
+                    <button class="btn" onclick="testGetStats()">▶️ Obtener Stats</button>
+                </div>
+            </div>
+
+            <!-- POST /logs/export -->
+            <div class="endpoint-card">
+                <div class="endpoint-header">
+                    <span class="method post">POST</span>
+                    <span class="endpoint-path">/logs/export</span>
+                </div>
+                <div class="endpoint-body">
+                    <select id="exportFormat">
+                        <option value="json">JSON</option>
+                        <option value="csv">CSV</option>
+                        <option value="txt">TXT</option>
+                    </select>
+                    <input type="text" id="exportFrom" placeholder="Desde (fecha/timestamp)">
+                    <input type="text" id="exportTo" placeholder="Hasta (fecha/timestamp)">
+                    <button class="btn" onclick="testExportLogs()">📤 Exportar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestaña: Lista de Logs -->
+    <div id="logs-list" class="tab-content">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+            <button class="btn" onclick="fetchLogs()">🔄 Actualizar</button>
+            <button class="btn btn-outline" onclick="toggleAutoRefresh()">⚡ Auto-refresh: <span id="autoRefreshStatus">OFF</span></button>
+            <input type="text" id="quickSearch" placeholder="🔍 Filtrar en tiempo real..." style="flex: 1; min-width: 200px;" oninput="filterLogsTable()">
+        </div>
+        
+        <div class="response-section">
+            <div class="response-header">
+                <span>📋 Resultados</span>
+                <span class="response-status" id="logsCount">0 registros</span>
+            </div>
+            <div class="response-body">
+                <table class="logs-table" id="logsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nivel</th>
+                            <th>Mensaje</th>
+                            <th>Clase</th>
+                            <th>Timestamp</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-secondary);">
+                                Presiona "Actualizar" para cargar logs
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestaña: Monitor -->
+    <div id="monitor" class="tab-content">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+            <button class="btn" id="monitorToggle" onclick="toggleMonitor()">▶️ Iniciar Monitor</button>
+            <span style="color: var(--text-secondary);">Intervalo: </span>
+            <select id="monitorInterval" style="background: var(--bg-primary); border: 1px solid var(--border); color: var(--text-primary); padding: 5px 10px; border-radius: 4px;">
+                <option value="2000">2s</option>
+                <option value="5000" selected>5s</option>
+                <option value="10000">10s</option>
+                <option value="30000">30s</option>
+            </select>
+            <span id="monitorStatus" style="margin-left: auto; color: var(--text-secondary);">Detenido</span>
+        </div>
+        
+        <div class="response-section">
+            <div class="response-header">
+                <span>📡 Stream de Logs en Vivo</span>
+                <span class="response-status status-2xx" id="monitorConnection">Desconectado</span>
+            </div>
+            <div class="response-body" id="monitorOutput" style="max-height: 500px;">
+                <em style="color: var(--text-secondary);">El monitor mostrará aquí los nuevos logs en tiempo real...</em>
+            </div>
+        </div>
+    </div>
+
+    <!-- Respuesta general -->
+    <div class="response-section" id="mainResponse" style="margin-top: 20px;">
+        <div class="response-header">
+            <span>📤 Última Respuesta</span>
+            <span class="response-status" id="responseStatus">—</span>
+        </div>
+        <div class="response-body" id="responseBody">// La respuesta aparecerá aquí...</div>
+    </div>
+
+    <script>
+        // === Configuración y Estado ===
+        let autoRefreshInterval = null;
+        let monitorInterval = null;
+        let isMonitoring = false;
+        let allLogs = []; // Para filtrado local
+
+        // === Utilidades ===
+        function getBaseUrl() {
+            return document.getElementById('baseUrl').value.replace(/\/$/, '');
+        }
+
+        function getHeaders() {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = document.getElementById('authToken').value.trim();
+            if (token) headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+            return headers;
+        }
+
+        function showResponse(status, data, endpoint = '') {
+            const statusEl = document.getElementById('responseStatus');
+            const bodyEl = document.getElementById('responseBody');
+            
+            statusEl.textContent = `${status} ${endpoint ? `- ${endpoint}` : ''}`;
+            statusEl.className = `response-status status-${Math.floor(status/100)}xx`;
+            
+            try {
+                bodyEl.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+            } catch {
+                bodyEl.textContent = String(data);
+            }
+        }
+
+        function showLoading(elementId, show = true) {
+            const el = document.getElementById(elementId);
+            if (show) {
+                el.innerHTML = '<span class="loading"></span> Procesando...';
+                el.disabled = true;
+            } else {
+                el.disabled = false;
+            }
+            return el;
+        }
+
+        async function apiRequest(endpoint, method = 'GET', body = null) {
+            const url = `${getBaseUrl()}${endpoint}`;
+            const config = { method, headers: getHeaders() };
+            if (body && ['POST', 'PUT', 'PATCH'].includes(method)) {
+                config.body = typeof body === 'string' ? body : JSON.stringify(body);
+            }
+            
+            try {
+                const response = await fetch(url, config);
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType?.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    data = await response.text();
+                }
+                
+                return { status: response.status, data, ok: response.ok };
+            } catch (error) {
+                return { status: 0, data: { error: `Error de conexión: ${error.message}` }, ok: false };
+            }
+        }
+
+        // === Endpoints de Logs ===
+        async function testGetLogs() {
+            const limit = document.getElementById('logs-limit').value || '50';
+            const offset = document.getElementById('logs-offset').value || '0';
+            const search = document.getElementById('logs-search').value;
+            const level = document.getElementById('logLevel').value;
+            
+            let params = new URLSearchParams({ limit, offset });
+            if (search) params.append('search', search);
+            if (level) params.append('level', level);
+            
+            const btn = showLoading('testGetLogsBtn', true);
+            const result = await apiRequest(`/logs?${params}`);
+            showLoading('testGetLogsBtn', false);
+            
+            showResponse(result.status, result.data, 'GET /logs');
+            if (result.ok) updateLogsTable(result.data);
+        }
+
+        async function testGetLogById() {
+            const id = document.getElementById('logId').value.trim();
+            if (!id) return alert('⚠️ Ingresa un ID de log');
+            
+            const result = await apiRequest(`/logs/${encodeURIComponent(id)}`);
+            showResponse(result.status, result.data, `GET /logs/${id}`);
+        }
+
+        async function testGenerateLog() {
+            const level = document.getElementById('testLevel').value;
+            const message = document.getElementById('testMessage').value || 'Log de prueba';
+            
+            const result = await apiRequest('/logs/test', 'POST', { level, message, source: 'test-panel' });
+            showResponse(result.status, result.data, 'POST /logs/test');
+            if (result.ok) fetchLogs(); // Refrescar lista
+        }
+
+        async function testDeleteLogs() {
+            const before = document.getElementById('deleteBefore').value;
+            const level = document.getElementById('deleteLevel').value;
+            
+            if (!before && !confirm('¿Eliminar TODOS los logs? Esta acción no se puede deshacer.')) return;
+            
+            const body = {};
+            if (before) body.before = before;
+            if (level) body.level = level;
+            
+            const result = await apiRequest('/logs', 'DELETE', body);
+            showResponse(result.status, result.data, 'DELETE /logs');
+            if (result.ok) fetchLogs();
+        }
+
+        async function testGetStats() {
+            const result = await apiRequest('/logs/stats');
+            showResponse(result.status, result.data, 'GET /logs/stats');
+        }
+
+        async function testExportLogs() {
+            const format = document.getElementById('exportFormat').value;
+            const from = document.getElementById('exportFrom').value;
+            const to = document.getElementById('exportTo').value;
+            
+            const params = new URLSearchParams({ format });
+            if (from) params.append('from', from);
+            if (to) params.append('to', to);
+            
+            const result = await apiRequest(`/logs/export?${params}`, 'POST');
+            showResponse(result.status, result.data, 'POST /logs/export');
+            
+            // Si es descarga directa
+            if (result.ok && result.data?.downloadUrl) {
+                window.open(result.data.downloadUrl, '_blank');
+            }
+        }
+
+        // === Gestión de Tabla de Logs ===
+        async function fetchLogs() {
+            const level = document.getElementById('logLevel').value;
+            let params = new URLSearchParams({ limit: 100, offset: 0 });
+            if (level) params.append('level', level);
+            
+            const result = await apiRequest(`/logs?${params}`);
+            if (result.ok) {
+                updateLogsTable(result.data);
+            } else {
+                showResponse(result.status, result.data, 'GET /logs');
+            }
+        }
+
+        function updateLogsTable(data) {
+            const tbody = document.getElementById('logsTableBody');
+            const logs = Array.isArray(data) ? data : (data.logs || data.data || []);
+            allLogs = logs;
+            
+            document.getElementById('logsCount').textContent = `${logs.length} registros`;
+            
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary)">No hay logs para mostrar</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = logs.slice(0, 100).map(log => `
+                <tr>
+                    <td><code style="font-size:0.85rem">${log.id || log._id || 'N/A'}</code></td>
+                    <td><span class="log-level ${(log.level || 'info').toLowerCase()}">${log.level || 'INFO'}</span></td>
+                    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(log.message || '')}">${escapeHtml(log.message || '')}</td>
+                    <td style="font-size:0.85rem;color:var(--text-secondary)">${escapeHtml(log.class || log.source || '-')}</td>
+                    <td style="font-size:0.85rem">${formatTimestamp(log.timestamp || log.createdAt)}</td>
+                    <td>
+                        <button class="btn btn-outline" style="padding:4px 8px;font-size:0.8rem" onclick="viewLogDetails('${log.id || log._id}')">👁️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function filterLogsTable() {
+            const query = document.getElementById('quickSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#logsTableBody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }
+
+        function viewLogDetails(id) {
+            apiRequest(`/logs/${encodeURIComponent(id)}`).then(result => {
+                showResponse(result.status, result.data, `GET /logs/${id}`);
+                // Cambiar a pestaña de endpoints para ver la respuesta
+                document.querySelector('[data-tab="endpoints"]').click();
+            });
+        }
+
+        // === Monitor en Vivo ===
+        function toggleMonitor() {
+            isMonitoring = !isMonitoring;
+            const btn = document.getElementById('monitorToggle');
+            const status = document.getElementById('monitorStatus');
+            const conn = document.getElementById('monitorConnection');
+            
+            if (isMonitoring) {
+                btn.textContent = '⏹️ Detener Monitor';
+                btn.style.background = 'var(--error)';
+                btn.style.color = 'white';
+                status.textContent = 'Activo';
+                conn.textContent = 'Conectado';
+                conn.className = 'response-status status-2xx';
+                startMonitoring();
+            } else {
+                btn.textContent = '▶️ Iniciar Monitor';
+                btn.style.background = '';
+                btn.style.color = '';
+                status.textContent = 'Detenido';
+                conn.textContent = 'Desconectado';
+                conn.className = 'response-status';
+                stopMonitoring();
+            }
+        }
+
+        function startMonitoring() {
+            const interval = parseInt(document.getElementById('monitorInterval').value);
+            monitorInterval = setInterval(async () => {
+                const result = await apiRequest('/logs?limit=10&sort=desc');
+                if (result.ok) {
+                    const logs = Array.isArray(result.data) ? result.data : (result.data.logs || []);
+                    if (logs.length > 0) {
+                        appendToMonitor(logs[0]); // Mostrar el más reciente
+                    }
+                }
+            }, interval);
+        }
+
+        function stopMonitoring() {
+            if (monitorInterval) clearInterval(monitorInterval);
+            monitorInterval = null;
+        }
+
+        function appendToMonitor(log) {
+            const output = document.getElementById('monitorOutput');
+            // Limpiar mensaje inicial
+            if (output.querySelector('em')) output.innerHTML = '';
+            
+            const entry = document.createElement('div');
+            entry.style.padding = '8px 0';
+            entry.style.borderBottom = '1px solid var(--border)';
+            entry.innerHTML = `
+                <span class="log-level ${(log.level || 'info').toLowerCase()}">${log.level || 'INFO'}</span>
+                <span style="color:var(--text-secondary);margin:0 10px;font-size:0.85rem">${formatTimestamp(log.timestamp || log.createdAt)}</span>
+                <span style="font-family:monospace">${escapeHtml(log.message || '')}</span>
+            `;
+            output.prepend(entry);
+            
+            // Limitar a 50 entradas
+            while (output.children.length > 50) {
+                output.removeChild(output.lastChild);
+            }
+        }
+
+        // === Auto-refresh para lista de logs ===
+        function toggleAutoRefresh() {
+            const statusEl = document.getElementById('autoRefreshStatus');
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                statusEl.textContent = 'OFF';
+                statusEl.style.color = 'var(--text-secondary)';
+            } else {
+                autoRefreshInterval = setInterval(fetchLogs, 10000);
+                statusEl.textContent = 'ON (10s)';
+                statusEl.style.color = 'var(--success)';
+                fetchLogs(); // Ejecutar inmediatamente
+            }
+        }
+
+        // === Gestión de Pestañas ===
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // === Utilidades de formato ===
+        function formatTimestamp(ts) {
+            if (!ts) return '-';
+            if (typeof ts === 'number') {
+                return new Date(ts).toLocaleString('es-ES');
+            }
+            // Intentar parsear string ISO
+            const date = new Date(ts);
+            return isNaN(date) ? ts : date.toLocaleString('es-ES');
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function clearAll() {
+            if (confirm('¿Limpiar panel de respuestas y tabla de logs?')) {
+                document.getElementById('responseBody').textContent = '// La respuesta aparecerá aquí...';
+                document.getElementById('responseStatus').textContent = '—';
+                document.getElementById('logsTableBody').innerHTML = 
+                    '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary)">Presiona "Actualizar" para cargar logs</td></tr>';
+                document.getElementById('logsCount').textContent = '0 registros';
+                document.getElementById('monitorOutput').innerHTML = 
+                    '<em style="color:var(--text-secondary)">El monitor mostrará aquí los nuevos logs en tiempo real...</em>';
+            }
+        }
+
+        // === Inicialización ===
+        document.addEventListener('DOMContentLoaded', () => {
+            // Cargar configuración guardada si existe
+            const savedUrl = localStorage.getItem('apiBaseUrl');
+            if (savedUrl) document.getElementById('baseUrl').value = savedUrl;
+            
+            // Guardar cambios en baseUrl
+            document.getElementById('baseUrl').addEventListener('change', (e) => {
+                localStorage.setItem('apiBaseUrl', e.target.value);
+            });
+            
+            // Atajos de teclado
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    // Ejecutar endpoint activo
+                    const activeTab = document.querySelector('.tab-content.active');
+                    if (activeTab.id === 'endpoints') {
+                        // Intentar ejecutar el primer botón disponible
+                        const btn = activeTab.querySelector('.btn:not(:disabled)');
+                        if (btn) btn.click();
+                    } else if (activeTab.id === 'logs-list') {
+                        fetchLogs();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
