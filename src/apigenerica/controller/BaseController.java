@@ -3,8 +3,10 @@ package apigenerica.controller;
 import apigenerica.TipoDatoMapper;
 import apigenerica.config.AppConfig;
 import apigenerica.config.ConexionMysql;
-import apigenerica.config.ConexionParadox;
+import logs.dao.ParadoxWorker;
 import apigenerica.dao.BaseDao;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import apigenerica.dao.MetaDao;
 import apigenerica.excepciones.BaseDatosException;
 import apigenerica.excepciones.RecursoNoEncontradoException;
@@ -672,29 +674,35 @@ public class BaseController {
      * @param tablaId ID de la tabla en erp_meta_tablas
      */
     private void rellenarSensibles(EntidadDinamica entidad, List<ColumnaConfig> columnas, long tablaId) {
-        try {
-            for (ColumnaConfig col : columnas) {
-                if (!col.isSensible()) continue;
-
+        for (ColumnaConfig col : columnas) {
+            if (!col.isSensible()) continue;
+            try {
                 String pk = String.valueOf(entidad.getId());
-                String sql = "SELECT valor FROM paradox_sensibles WHERE tabla_id=? AND columna_id=? AND pk=?";
-
-                try (PreparedStatement ps = ConexionParadox.getConexion().prepareStatement(sql)) {
-                    ps.setLong(1, tablaId);
-                    ps.setLong(2, col.getId());
-                    ps.setString(3, pk);
-                    ResultSet rs = ps.executeQuery();
-                    ConexionParadox.contarUso();
-
-                    if (rs.next()) {
-                        // Desencriptar antes de devolver al cliente
-                        entidad.set(col.getNombre(), cifrado.desencriptar(rs.getString("valor")));
+                String resultado = ejecutarParadoxWorker(
+                    "SENS_SELECT",
+                    String.valueOf(tablaId),
+                    String.valueOf(col.getId()),
+                    ParadoxWorker.encode(pk)
+                );
+                if (resultado != null && resultado.startsWith("OK:")) {
+                    String valorEnc = resultado.substring(3);
+                    if (!"NULL".equals(valorEnc)) {
+                        // decode del encode que hizo el worker en encode()
+                        String valorDecod = valorEnc
+                            .replace("__SPACE__",     " ")
+                            .replace("__NL__",        "\n")
+                            .replace("__CR__",        "\r")
+                            .replace("__BACKSLASH__", "\\");
+                        entidad.set(col.getNombre(), cifrado.desencriptar(valorDecod));
                     }
+                } else if (resultado != null && resultado.startsWith("ERROR:")) {
+                    System.err.println("[API] AVISO: ParadoxWorker SELECT error para col '"
+                        + col.getNombre() + "': " + resultado.substring(6));
                 }
+            } catch (Exception e) {
+                System.err.println("[API] AVISO: No se pudo leer sensible '" + col.getNombre()
+                    + "' desde Paradox: " + e.getMessage());
             }
-        } catch (Exception e) {
-            System.err.println("[API] AVISO: No se pudieron leer datos sensibles de Paradox: " + e.getMessage());
-            // Paradox no disponible: continuamos sin datos sensibles
         }
     }
 
@@ -719,24 +727,25 @@ public class BaseController {
 
             if (val == null) continue;
 
-            // Intentar guardar en Paradox. Si falla se loguea pero el INSERT
+            // Intentar guardar en Paradox vía subproceso. Si falla se loguea pero el INSERT
             // en MySQL sigue adelante (columna quedara NULL en MySQL).
             try {
                 String enc = cifrado.encriptar(val.toString());
-                String sql = pkExistente == null
-                        ? "INSERT INTO paradox_sensibles (tabla_id, columna_id, pk, valor) VALUES (?,?,?,?)"
-                        : "REPLACE INTO paradox_sensibles (tabla_id, columna_id, pk, valor) VALUES (?,?,?,?)";
-                try (PreparedStatement ps = ConexionParadox.getConexion().prepareStatement(sql)) {
-                    ps.setLong(1, tablaId);
-                    ps.setLong(2, col.getId());
-                    ps.setString(3, pkExistente == null ? "PENDING" : String.valueOf(pkExistente));
-                    ps.setString(4, enc);
-                    ps.executeUpdate();
-                    ConexionParadox.getConexion().commit();
-                    ConexionParadox.contarUso();
+                String pk  = pkExistente == null ? "PENDING" : String.valueOf(pkExistente);
+                String resultado = ejecutarParadoxWorker(
+                    "SENS_INSERT",
+                    String.valueOf(tablaId),
+                    String.valueOf(col.getId()),
+                    ParadoxWorker.encode(pk),
+                    ParadoxWorker.encode(enc)
+                );
+                if (resultado == null || resultado.startsWith("ERROR:")) {
+                    System.err.println("[API] AVISO: ParadoxWorker INSERT falló para col '"
+                        + col.getNombre() + "': " + (resultado != null ? resultado.substring(6) : "null"));
                 }
             } catch (Exception e) {
-                System.err.println("[API] AVISO: No se pudo guardar campo sensible '" + col.getNombre() + "' en Paradox: " + e.getMessage());
+                System.err.println("[API] AVISO: No se pudo guardar campo sensible '"
+                    + col.getNombre() + "' en Paradox: " + e.getMessage());
             }
         }
     }
@@ -749,13 +758,14 @@ public class BaseController {
      */
     private void actualizarPkSensibles(long tablaId, long pkReal) {
         try {
-            String sql = "UPDATE paradox_sensibles SET pk=? WHERE tabla_id=? AND pk='PENDING'";
-            try (PreparedStatement ps = ConexionParadox.getConexion().prepareStatement(sql)) {
-                ps.setString(1, String.valueOf(pkReal));
-                ps.setLong(2, tablaId);
-                ps.executeUpdate();
-                ConexionParadox.getConexion().commit();
-                ConexionParadox.contarUso();
+            String resultado = ejecutarParadoxWorker(
+                "SENS_UPDATE_PK",
+                String.valueOf(tablaId),
+                ParadoxWorker.encode(String.valueOf(pkReal))
+            );
+            if (resultado == null || resultado.startsWith("ERROR:")) {
+                System.err.println("[API] AVISO: ParadoxWorker UPDATE_PK falló: "
+                    + (resultado != null ? resultado.substring(6) : "null"));
             }
         } catch (Exception e) {
             System.err.println("[API] AVISO: No se pudo actualizar PK en Paradox: " + e.getMessage());
@@ -769,16 +779,68 @@ public class BaseController {
      */
     private void borrarSensibles(long tablaId, long pk) {
         try {
-            String sql = "DELETE FROM paradox_sensibles WHERE tabla_id=? AND pk=?";
-            try (PreparedStatement ps = ConexionParadox.getConexion().prepareStatement(sql)) {
-                ps.setLong(1, tablaId);
-                ps.setString(2, String.valueOf(pk));
-                ps.executeUpdate();
-                ConexionParadox.getConexion().commit();
-                ConexionParadox.contarUso();
+            String resultado = ejecutarParadoxWorker(
+                "SENS_DELETE",
+                String.valueOf(tablaId),
+                ParadoxWorker.encode(String.valueOf(pk))
+            );
+            if (resultado == null || resultado.startsWith("ERROR:")) {
+                throw new BaseDatosException("ParadoxWorker DELETE falló: "
+                    + (resultado != null ? resultado.substring(6) : "null"), null);
             }
+        } catch (BaseDatosException e) {
+            throw e;
         } catch (Exception e) {
             throw new BaseDatosException("Error al eliminar datos sensibles.", e);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SUBPROCESS: Lanza ParadoxWorker en JVM nueva (evita límite 50 queries)
+    // ═══════════════════════════════════════════════════════════════════
+
+    private static final String CARPETA_SENSIBLES = "base_de_datos";
+
+    /**
+     * Ejecuta ParadoxWorker en un subproceso independiente para operaciones
+     * sobre paradox_sensibles. Cada llamada crea una JVM nueva → contador
+     * de queries a 0 → nunca se alcanza el límite de 50 del driver HXTT.
+     *
+     * @param cmd   Comando SENS_*: SENS_INSERT, SENS_UPDATE_PK, SENS_SELECT,
+     *              SENS_SELECT_ALL_TABLE, SENS_DELETE, SENS_INIT
+     * @param args  Argumentos adicionales dependientes del comando
+     * @return Línea de stdout del worker ("OK:..." o "ERROR:..."), o null si falló el proceso
+     */
+    private static String ejecutarParadoxWorker(String cmd, String... args) {
+        try {
+            String carpetaAbs = new java.io.File(CARPETA_SENSIBLES).getAbsolutePath();
+            String classpath  = System.getProperty("java.class.path");
+            String javaExe    = System.getProperty("java.home") + "/bin/java";
+
+            java.util.List<String> cmdList = new java.util.ArrayList<>();
+            cmdList.add(javaExe);
+            cmdList.add("-cp");
+            cmdList.add(classpath);
+            cmdList.add("logs.dao.ParadoxWorker");
+            cmdList.add(carpetaAbs);
+            cmdList.add(cmd);
+            for (String a : args) cmdList.add(a);
+
+            ProcessBuilder pb = new ProcessBuilder(cmdList);
+            pb.redirectErrorStream(false);
+            Process proc = pb.start();
+
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream()))) {
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+            }
+            proc.waitFor();
+            return sb.toString().trim();
+        } catch (Exception e) {
+            System.err.println("[API] ejecutarParadoxWorker error: " + e.getMessage());
+            return null;
         }
     }
 

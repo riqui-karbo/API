@@ -1,120 +1,117 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package apigenerica.service;
 
 import apigenerica.model.TablaConfig;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
+ * Caché de metadatos de tablas almacenado en Paradox (tabla meta_cache).
+ *
+ * Toda operación sobre Paradox se delega a ParadoxWorker (comandos META_*)
+ * ejecutado en un subproceso independiente (JVM nueva). Esto garantiza que
+ * el contador global de 50 queries del driver HXTT evaluación nunca se
+ * alcance: cada subproceso arranca con el contador a 0 y muere al terminar.
+ *
  * @author Grupo1
  */
 public class ParadoxCache {
 
-    private final Connection conexion;
-    private final ReentrantLock lock = new ReentrantLock(); // Para bloquear las conexiones
-    private final ObjectMapper jackson = new ObjectMapper(); // ObjectMapper de Jackson
+    private final String carpeta;
+    private final ObjectMapper jackson = new ObjectMapper();
 
     public ParadoxCache(String ruta) throws SQLException {
-        String rutaNorm = new java.io.File(ruta).getAbsolutePath().replace("\\", "/");
-        this.conexion = DriverManager.getConnection("jdbc:paradox:///" + rutaNorm);
-        asegurarTablaMeta();
-    }
-
-    /**
-     * Crea la tabla meta_cache si no existe todavía.
-     * Usa el mismo patrón que ParadoxWorker: intenta CREATE TABLE y captura
-     * la excepción "ya existe" en lugar de consultar getTables() (poco fiable
-     * con el driver HXTT evaluación).
-     */
-    private void asegurarTablaMeta() {
-        try (java.sql.Statement stmt = conexion.createStatement()) {
-            stmt.executeUpdate(
-                "CREATE TABLE meta_cache (" +
-                "nombre_logico VARCHAR(150)," +
-                "datos         VARCHAR(255)" +
-                ")"
-            );
-            System.out.println("[ParadoxCache] Tabla meta_cache creada por primera vez.");
-        } catch (SQLException e) {
-            String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
-            if (msg.contains("already") || msg.contains("exist") || msg.contains("duplicate")) {
-                return; // La tabla ya existía — OK
-            }
-            System.err.println("[ParadoxCache] Aviso al crear meta_cache: " + e.getMessage());
+        this.carpeta = new java.io.File(ruta).getAbsolutePath();
+        // Asegurar que la tabla existe lanzando META_INIT en subproceso
+        String r = ejecutarWorker("META_INIT");
+        if (r == null || r.startsWith("ERROR:")) {
+            System.err.println("[ParadoxCache] Advertencia al inicializar meta_cache: "
+                + (r != null ? r : "null"));
         }
     }
 
     public Optional<TablaConfig> get(String nombreLogico) throws SQLException {
-        lock.lock();
+        String resultado = ejecutarWorker("META_GET", logs.dao.ParadoxWorker.encode(nombreLogico));
+        if (resultado == null || resultado.startsWith("ERROR:")) {
+            System.err.println("[ParadoxCache] META_GET error: "
+                + (resultado != null ? resultado.substring(6) : "null"));
+            return Optional.empty();
+        }
+        String val = resultado.substring(3); // quitar "OK:"
+        if ("NULL".equals(val)) return Optional.empty();
+        // Descodificar el valor que vino encode()d del worker
+        String json = val.replace("__SPACE__",     " ")
+                         .replace("__NL__",        "\n")
+                         .replace("__CR__",        "\r")
+                         .replace("__BACKSLASH__", "\\");
         try {
-            String sql = "SELECT * FROM meta_cache WHERE nombre_logico = ?";
-            try (PreparedStatement stmt = conexion.prepareStatement(sql)) {
-                stmt.setString(1, nombreLogico);
-                ResultSet rs = stmt.executeQuery();
-                if (rs.next()) {
-                    return Optional.of(deserializarTabla(rs));
-                }
-                return Optional.empty();
-            }
-        } finally {
-            lock.unlock();
+            return Optional.of(jackson.readValue(json, TablaConfig.class));
+        } catch (JsonProcessingException e) {
+            throw new SQLException("Error al deserializar TablaConfig", e);
         }
     }
 
     public void insertar(TablaConfig tabla) throws SQLException {
-        lock.lock();
-        // Hashear configuración y guardar como Etag
-        //String json = jackson.writeValueAsString(tabla);
-        //tabla.setEtag(Integer.toHexString(json.hashCode()));
         try {
-            String sql = "INSERT INTO meta_cache (nombre_logico, datos) VALUES (?, ?)";
-            try (PreparedStatement stmt = conexion.prepareStatement(sql)) {
-                stmt.setString(1, tabla.getNombreLogico());
-                stmt.setString(2, serializarTabla(tabla));
-                stmt.executeUpdate();
+            String json = jackson.writeValueAsString(tabla);
+            String resultado = ejecutarWorker(
+                "META_INSERT",
+                logs.dao.ParadoxWorker.encode(tabla.getNombreLogico()),
+                logs.dao.ParadoxWorker.encode(json)
+            );
+            if (resultado == null || resultado.startsWith("ERROR:")) {
+                System.err.println("[ParadoxCache] META_INSERT error: "
+                    + (resultado != null ? resultado.substring(6) : "null"));
             }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public void borrar(String nombreLogico) throws SQLException {
-        lock.lock();
-        try {
-            String sql = "DELETE FROM meta_cache WHERE nombre_logico = ?";
-            try (PreparedStatement stmt = conexion.prepareStatement(sql)) {
-                stmt.setString(1, nombreLogico);
-                stmt.executeUpdate();
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private String serializarTabla(TablaConfig tabla) throws SQLException {
-        try {
-            return jackson.writeValueAsString(tabla);
         } catch (JsonProcessingException e) {
             throw new SQLException("Error al serializar TablaConfig", e);
         }
     }
 
-    private TablaConfig deserializarTabla(ResultSet rs) throws SQLException {
+    public void borrar(String nombreLogico) throws SQLException {
+        String resultado = ejecutarWorker("META_DELETE", logs.dao.ParadoxWorker.encode(nombreLogico));
+        if (resultado == null || resultado.startsWith("ERROR:")) {
+            System.err.println("[ParadoxCache] META_DELETE error: "
+                + (resultado != null ? resultado.substring(6) : "null"));
+        }
+    }
+
+    // ── Subprocess helper ─────────────────────────────────────────────────────
+
+    private String ejecutarWorker(String cmd, String... args) {
         try {
-            String json = rs.getString("datos");
-            return jackson.readValue(json, TablaConfig.class);
-        } catch (JsonProcessingException e) {
-            throw new SQLException("Error al deserializar TablaConfig", e);
+            String classpath = System.getProperty("java.class.path");
+            String javaExe   = System.getProperty("java.home") + "/bin/java";
+
+            List<String> cmdList = new ArrayList<>();
+            cmdList.add(javaExe);
+            cmdList.add("-cp");
+            cmdList.add(classpath);
+            cmdList.add("logs.dao.ParadoxWorker");
+            cmdList.add(carpeta);
+            cmdList.add(cmd);
+            for (String a : args) cmdList.add(a);
+
+            ProcessBuilder pb = new ProcessBuilder(cmdList);
+            pb.redirectErrorStream(false);
+            Process proc = pb.start();
+
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream()))) {
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+            }
+            proc.waitFor();
+            return sb.toString().trim();
+        } catch (Exception e) {
+            System.err.println("[ParadoxCache] ejecutarWorker error: " + e.getMessage());
+            return null;
         }
     }
 }

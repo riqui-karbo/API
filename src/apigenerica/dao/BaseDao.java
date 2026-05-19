@@ -31,11 +31,33 @@ public class BaseDao {
     public long insertar(Connection conn, String nombreTabla, EntidadDinamica entidad) throws SQLException {
         Map<String, Object> datos = entidad.getTodo();
 
-        if (datos == null || datos.isEmpty()) {
-            throw new IllegalArgumentException("No hay datos para insertar");
+        // Detectar PK para excluirla del INSERT (es AUTO_INCREMENT; incluirla da error)
+        String pkCol = detectarPK(conn, nombreTabla);
+
+        // Filtrar la PK del mapa de datos antes de construir el INSERT
+        // NOTA: datos puede estar vacío si todas las columnas eran sensibles y
+        // guardarSensibles() las eliminó antes de llamar a insertar().
+        List<String> columnas = new ArrayList<>();
+        if (datos != null) {
+            for (String k : datos.keySet()) {
+                if (!k.equalsIgnoreCase(pkCol)) {
+                    columnas.add(k);
+                }
+            }
         }
 
-        List<String> columnas = new ArrayList<>(datos.keySet());
+        if (columnas.isEmpty()) {
+            // Todos los campos eran sensibles: guardarSensibles() los eliminó antes del INSERT.
+            // Se inserta solo la PK con DEFAULT para que MySQL genere el AUTO_INCREMENT.
+            String sql = "INSERT INTO `" + nombreTabla + "` (`" + pkCol + "`) VALUES (DEFAULT)";
+            try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                stmt.executeUpdate();
+                try (ResultSet rs = stmt.getGeneratedKeys()) {
+                    if (rs.next()) return rs.getLong(1);
+                }
+            }
+            return 0;
+        }
 
         // Construir sentencia de INSERT
         StringBuilder sql = new StringBuilder("INSERT INTO `").append(nombreTabla).append("` (");
