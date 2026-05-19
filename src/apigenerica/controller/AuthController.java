@@ -12,6 +12,7 @@ import io.javalin.http.HttpCode;
 
 import java.util.HashMap;
 import java.util.Map;
+import logs.service.LogService;
 import org.mindrot.jbcrypt.BCrypt;
 
 /**
@@ -63,13 +64,15 @@ public class AuthController {
                 String rol = (String) login.get("rol");
                 // Generar JWT
                 Map<String, String> respuesta = jwtService.insertarTokensRespuesta(usuarioId, rol);
+                LogService.registrar(email, "LOGIN", "erp_users", "Inicio de sesión exitoso. Rol: " + rol);
                 ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
                 return;
             }
         } else {
             System.out.println("[DEBUG AuthController] No se encontro el usuario en BD para el email: " + email);
         }
-// Contraseña incorrecta o no se encontró el email en la base de datos
+        // Contraseña incorrecta o no se encontró el email en la base de datos
+        LogService.registrar(email, "LOGIN_FALLIDO", "erp_users", "Intento de inicio de sesión fallido.");
         ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Credenciales incorrectas."));
     }
 
@@ -128,5 +131,7 @@ public class AuthController {
         String email = datosUsuario.get("email");
         String password = datosUsuario.get("password");
         String rol = datosUsuario.get("rol");
+        LogService.registrar("sistema", "INSERT", "erp_users", "Registro de nuevo usuario: " 
+                + email + " con rol: " + (rol != null ? rol : "sin rol"));
     }
 }

@@ -10,6 +10,7 @@ import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import java.util.List;
 import java.util.Map;
+import logs.service.LogService;
 
 /**
  * Controlador para la gestión de roles y permisos del ERP.
@@ -63,6 +64,7 @@ public class RolController {
         }
 
         rolDao.crearRol(nombre, descripcion.trim());
+        LogService.registrar("admin", "INSERT", "erp_roles", "Rol creado: " + nombre);
         ctx.status(HttpCode.CREATED).json(ApiRespuesta.ok("Rol '" + nombre + "' creado correctamente."));
     }
 
@@ -84,6 +86,7 @@ public class RolController {
 
         boolean eliminado = rolDao.eliminarRol(nombre);
         if (eliminado) {
+            LogService.registrar("admin", "DELETE", "erp_roles", "Rol eliminado: " + nombre);
             ctx.status(HttpCode.OK).json(ApiRespuesta.ok("Rol '" + nombre + "' eliminado correctamente."));
         } else {
             throw new RecursoNoEncontradoException("No se encontró el rol '" + nombre + "'.");
@@ -131,6 +134,8 @@ public class RolController {
 
         permiso.setRol(nombre);
         rolDao.guardarPermiso(permiso);
+        LogService.registrar("admin", "UPDATE", "erp_roles", 
+                "Permiso actualizado para rol '" + nombre + "' sobre tabla" + permiso.getTabla() + "'");
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok(
             "Permisos del rol '" + nombre + "' sobre '" + permiso.getTabla() + "' guardados correctamente."
         ));
