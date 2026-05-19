@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test API ERP — MySQL</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0d0f12;
+    --panel: #13161b;
+    --border: #1e2229;
+    --accent: #00e5a0;
+    --accent2: #0099ff;
+    --danger: #ff4d6d;
+    --warn: #ffb800;
+    --text: #e2e8f0;
+    --muted: #4a5568;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  /* GRID */
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1.5rem;
+  }
+
+  /* HEADER */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.5rem;
+  }
+  .logo {
+    width: 40px; height: 40px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+  }
+  header h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.5px; }
+  header span { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin-left: auto; }
+
+  /* STATUS BAR */
+  .status-bar {
+    grid-column: 1 / -1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.8rem 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+  .dot.ok { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+  #status-text { color: var(--muted); }
+  .token-badge {
+    margin-left: auto;
+    background: #1a2a1e;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 0.25rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    display: none;
+  }
+  .token-badge.visible { display: block; }
+
+  /* SIDEBAR */
+  .sidebar { display: flex; flex-direction: column; gap: 1rem; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+  }
+  .card h2 {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+    margin-top: 0.8rem;
+  }
+  label:first-of-type { margin-top: 0; }
+
+  input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    padding: 0.55rem 0.8rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--accent2); }
+
+  .btn {
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.65rem;
+    border: none;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--accent); color: #0d0f12; }
+  .btn-secondary { background: var(--accent2); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-warn { background: var(--warn); color: #0d0f12; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ENDPOINT BUTTONS */
+  .endpoints { display: flex; flex-direction: column; gap: 0.5rem; }
+  .ep-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--text);
+    text-align: left;
+    transition: border-color 0.2s, background 0.2s;
+    width: 100%;
+  }
+  .ep-btn:hover { border-color: var(--accent2); background: #131820; }
+  .method {
+    font-weight: 700;
+    font-size: 0.65rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .GET  { background: #0a2a1e; color: var(--accent); }
+  .POST { background: #0a1a2e; color: var(--accent2); }
+  .ep-path { color: var(--muted); }
+
+  /* MAIN */
+  .main { display: flex; flex-direction: column; gap: 1rem; }
+
+  /* RESPONSE */
+  .response-panel {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 400px;
+  }
+  .response-header {
+    padding: 0.8rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-size: 0.72rem;
+    font-family: var(--mono);
+  }
+  .response-header span { color: var(--muted); }
+  #status-code {
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 5px;
+    font-size: 0.72rem;
+    background: var(--border);
+    color: var(--muted);
+  }
+  #status-code.ok   { background: #0a2a1e; color: var(--accent); }
+  #status-code.fail { background: #2a0a10; color: var(--danger); }
+  #elapsed { margin-left: auto; color: var(--muted); }
+
+  #response-body {
+    flex: 1;
+    padding: 1.2rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #a0aec0;
+  }
+
+  /* JSON colors */
+  .j-key   { color: var(--accent2); }
+  .j-str   { color: var(--accent); }
+  .j-num   { color: var(--warn); }
+  .j-bool  { color: #ff7eb3; }
+  .j-null  { color: var(--muted); }
+
+  /* CUSTOM REQUEST */
+  .custom-card textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 0.7rem 0.8rem;
+    outline: none;
+    resize: vertical;
+    min-height: 80px;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent2); }
+
+  select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 0.55rem 0.8rem;
+    outline: none;
+    width: 90px;
+  }
+
+  .row { display: flex; gap: 0.5rem; align-items: flex-end; }
+  .row input { flex: 1; }
+
+  .spinner {
+    display: none;
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  .spinner.visible { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+  }
+  .empty-state .icon { font-size: 2rem; opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <header>
+    <div class="logo">⚡</div>
+    <div>
+      <h1>API ERP — Tester MySQL</h1>
+    </div>
+    <span id="api-url-display">localhost:7000</span>
+  </header>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <div class="dot" id="conn-dot"></div>
+    <span id="status-text">Sin conectar — pulsa "Probar Conexión"</span>
+    <div class="spinner" id="spinner"></div>
+    <div class="token-badge" id="token-badge">🔑 Token activo</div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- CONFIG -->
+    <div class="card">
+      <h2>Configuración</h2>
+      <label>Host API</label>
+      <input type="text" id="api-host" value="http://localhost:7000">
+      <button class="btn btn-warn" onclick="probarConexion()">⚡ Probar Conexión MySQL</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="card">
+      <h2>Login</h2>
+      <label>Email</label>
+      <input type="text" id="login-email" value="admin@erp.com">
+      <label>Contraseña</label>
+      <input type="password" id="login-pass" value="admin123">
+      <button class="btn btn-primary" onclick="login()">Iniciar sesión</button>
+    </div>
+
+    <!-- ENDPOINTS RÁPIDOS -->
+    <div class="card">
+      <h2>Endpoints rápidos</h2>
+      <div class="endpoints">
+        <button class="ep-btn" onclick="quickGet('/api/admin/bd/conexion')">
+          <span class="method GET">GET</span>
+          <span class="ep-path">/api/admin/bd/conexion</span>
+        </button>
+        <button class="ep-btn" onclick="quickGet('/api/admin/bd')">
+          <span class="method GET">GET</span>
+          <span class="ep-path">/api/admin/bd</span>
+        </button>
+        <button class="ep-btn" onclick="quickGet('/api/metadata/tablas')">
+          <span class="method GET">GET</span>
+          <span class="ep-path">/api/metadata/tablas</span>
+        </button>
+        <button class="ep-btn" onclick="quickGet('/api/erp/modulos')">
+          <span class="method GET">GET</span>
+          <span class="ep-path">/api/erp/modulos</span>
+        </button>
+        <button class="ep-btn" onclick="quickGet('/api/roles')">
+          <span class="method GET">GET</span>
+          <span class="ep-path">/api/roles</span>
+        </button>
+        <button class="ep-btn" onclick="quickGet('/api/erp/config')">
+          <span class="method GET">GET</span>
+          <span class="ep-path">/api/erp/config</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- CUSTOM REQUEST -->
+    <div class="card custom-card">
+      <h2>Petición personalizada</h2>
+      <div class="row" style="margin-top:0.3rem">
+        <select id="custom-method">
+          <option>GET</option>
+          <option>POST</option>
+          <option>PUT</option>
+          <option>DELETE</option>
+        </select>
+        <input type="text" id="custom-path" placeholder="/api/..." value="/api/admin/bd/conexion">
+      </div>
+      <label>Body JSON (solo POST / PUT)</label>
+      <textarea id="custom-body" placeholder='{"clave": "valor"}'></textarea>
+      <button class="btn btn-secondary" onclick="sendCustom()">Enviar petición →</button>
+    </div>
+
+    <!-- RESPONSE -->
+    <div class="response-panel">
+      <div class="response-header">
+        <span>Respuesta</span>
+        <div id="status-code">—</div>
+        <span id="elapsed"></span>
+      </div>
+      <div id="response-body">
+        <div class="empty-state">
+          <div class="icon">🛢</div>
+          <div>Ejecuta una petición para ver la respuesta</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  let token = null;
+
+  function host() {
+    return document.getElementById('api-host').value.replace(/\/$/, '');
+  }
+
+  function setStatus(msg, ok) {
+    document.getElementById('status-text').textContent = msg;
+    const dot = document.getElementById('conn-dot');
+    dot.className = 'dot' + (ok === true ? ' ok' : ok === false ? ' error' : '');
+  }
+
+  function setLoading(on) {
+    document.getElementById('spinner').className = 'spinner' + (on ? ' visible' : '');
+  }
+
+  function headers(json) {
+    const h = { 'Content-Type': 'application/json' };
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    return h;
+  }
+
+  function colorJson(obj) {
+    const str = JSON.stringify(obj, null, 2);
+    return str.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+      if (/^"/.test(match)) {
+        if (/:$/.test(match)) return '<span class="j-key">' + match + '</span>';
+        return '<span class="j-str">' + match + '</span>';
+      }
+      if (/true|false/.test(match)) return '<span class="j-bool">' + match + '</span>';
+      if (/null/.test(match)) return '<span class="j-null">' + match + '</span>';
+      return '<span class="j-num">' + match + '</span>';
+    });
+  }
+
+  function showResponse(code, data, ms) {
+    const sc = document.getElementById('status-code');
+    sc.textContent = code;
+    sc.className = (code >= 200 && code < 300) ? 'ok' : 'fail';
+    document.getElementById('elapsed').textContent = ms + 'ms';
+    const rb = document.getElementById('response-body');
+    try {
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      rb.innerHTML = colorJson(parsed);
+    } catch {
+      rb.textContent = data;
+    }
+  }
+
+  async function request(method, path, body) {
+    setLoading(true);
+    const t0 = Date.now();
+    try {
+      const opts = { method, headers: headers() };
+      if (body && (method === 'POST' || method === 'PUT')) {
+        opts.body = JSON.stringify(JSON.parse(body));
+      }
+      const r = await fetch(host() + path, opts);
+      const text = await r.text();
+      showResponse(r.status, text, Date.now() - t0);
+      return { ok: r.ok, text };
+    } catch (e) {
+      showResponse('ERR', JSON.stringify({ error: e.message }), Date.now() - t0);
+      return { ok: false };
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function probarConexion() {
+    setStatus('Comprobando conexión con MySQL...', null);
+    const r = await request('GET', '/api/admin/bd/conexion');
+    if (r.ok) {
+      setStatus('✅ MySQL conectado correctamente', true);
+    } else {
+      setStatus('❌ Error de conexión — revisa db.properties y que la API esté arrancada', false);
+    }
+  }
+
+  async function login() {
+    const email = document.getElementById('login-email').value;
+    const pass  = document.getElementById('login-pass').value;
+    setStatus('Autenticando...', null);
+    setLoading(true);
+    const t0 = Date.now();
+    try {
+      const r = await fetch(host() + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, contrasena: pass })
+      });
+      const text = await r.text();
+      showResponse(r.status, text, Date.now() - t0);
+      if (r.ok) {
+        const json = JSON.parse(text);
+        token = json.token || json.data?.token || null;
+        if (token) {
+          document.getElementById('token-badge').className = 'token-badge visible';
+          setStatus('✅ Login correcto — token guardado', true);
+        } else {
+          setStatus('⚠️ Login OK pero no se encontró token en la respuesta', null);
+        }
+      } else {
+        setStatus('❌ Login fallido', false);
+      }
+    } catch(e) {
+      showResponse('ERR', JSON.stringify({ error: e.message }), Date.now() - t0);
+      setStatus('❌ No se pudo conectar con la API', false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function quickGet(path) {
+    document.getElementById('custom-path').value = path;
+    document.getElementById('custom-method').value = 'GET';
+    await request('GET', path);
+  }
+
+  async function sendCustom() {
+    const method = document.getElementById('custom-method').value;
+    const path   = document.getElementById('custom-path').value;
+    const body   = document.getElementById('custom-body').value.trim();
+    await request(method, path, body || null);
+  }
+</script>
+</body>
+</html>
