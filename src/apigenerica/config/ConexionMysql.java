@@ -103,11 +103,11 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Tabla de usuarios de la aplicación
+            // Tabla de usuarios de la aplicación (Añadido UNIQUE en email para consistencia)
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_users` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
-                "  `email` VARCHAR(255) NOT NULL," +
+                "  `email` VARCHAR(255) NOT NULL UNIQUE," +
                 "  `contrasena` CHAR(60) NOT NULL," +
                 "  `rol` VARCHAR(50) NOT NULL," +
                 "  `activo` TINYINT(1) NOT NULL DEFAULT 1" +
@@ -214,6 +214,24 @@ public class ConexionMysql {
                     System.out.println("[API] Roles por defecto creados (admin, empleado).");
                 }
             }
+
+            // ── NUEVO: Inyección automática del usuario Administrador ──
+            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM `erp_users`")) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    // Hash BCrypt real de 60 caracteres correspondiente a "123456"
+                    String adminPasswordHash = "$2a$10$Mb77bXnSlg9Ssn9K9uG8E.f7S3G.Zl0byv90Tf9zN5wSvl0N6.bqu";
+                    
+                    try (PreparedStatement pstmt = conn.prepareStatement(
+                            "INSERT INTO `erp_users` (email, contrasena, rol, activo) VALUES (?, ?, ?, 1)")) {
+                        pstmt.setString(1, "admin@erp.com");
+                        pstmt.setString(2, adminPasswordHash);
+                        pstmt.setString(3, "admin");
+                        pstmt.executeUpdate();
+                    }
+                    System.out.println("[API] Usuario administrador creado con éxito (admin@erp.com / 123456).");
+                }
+            }
+            // ───────────────────────────────────────────────────────────
 
             System.out.println("[API] Estructura de metadatos sincronizada.");
 

@@ -10,3 +10,4 @@
 ["10","sistema/web","INSERT","erp_meta_columnas","Columna creada externamente: 'id' tipo=ENTERO nullable=0","2026-05-18 21:07:05.482"]
 ["11","sistema/web","INSERT","erp_meta_columnas","Columna creada externamente: 'nombre' tipo=TEXTO_CORTO nullable=0","2026-05-18 21:07:05.482"]
 ["12","admin@erp.com","LOGIN","erp_users","Inicio de sesión exitoso. Rol: admin","2026-05-19 19:17:15.697"]
+["13","admin@erp.com","LOGIN","erp_users","Inicio de sesión exitoso. Rol: admin","2026-05-19 19:45:14.854"]
