@@ -1,35 +1,48 @@
-/*
-Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
-Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
-*/
 package apigenerica.config;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
 /**
+ * Configuracion global de la aplicacion.
+ * Todos los valores se leen desde db.properties (en el classpath).
+ *
  * @author Grupo1
  */
 public class AppConfig {
 
-    public static final String DB_SISTEMA = "erp_sistema";
+    private static final Properties PROPS = new Properties();
+    public static String AES_KEY;
 
-    // Estas variables se llenan al iniciar la API (desde un .env, properties o el instalador)
-    // public static String DB_CLIENTE = System.getenv("DB_CLIENTE");
-    public static final String DB_CLIENTE = "erp_empresa";
-    
-    // private static final String SECRET_KEY = System.getenv("SECRET_KEY");
-    private static final String SECRET_KEY = "clave_secreta_de_prueba"; // Firma y verifica los tokens
+    static {
+        try (InputStream is = AppConfig.class.getClassLoader()
+                .getResourceAsStream("db.properties")) {
+            if (is == null) {
+                throw new RuntimeException(
+                    "[AppConfig] No se encontro db.properties en el classpath. " +
+                    "Coloca el archivo en src/ antes de compilar.");
+            }
+            PROPS.load(is);
+        } catch (IOException e) {
+            throw new RuntimeException("[AppConfig] Error leyendo db.properties: " + e.getMessage(), e);
+        }
+    }
 
-    // Getter
+    // ── Bases de datos ──────────────────────────────────────────────
+    public static final String DB_SISTEMA  = PROPS.getProperty("db.nombre_sistema", "erp_sistema");
+    public static final String DB_CLIENTE  = PROPS.getProperty("db.nombre_cliente", "erp_empresa");
+
+    // ── Conexion MySQL ──────────────────────────────────────────────
+    public static final String DB_HOST     = PROPS.getProperty("db.host",    "localhost");
+    public static final String DB_PORT     = PROPS.getProperty("db.port",    "3306");
+    public static final String DB_USUARIO  = PROPS.getProperty("db.usuario", "root");
+    public static final String DB_PASSWORD = PROPS.getProperty("db.password", "");
+
+    // ── Seguridad ───────────────────────────────────────────────────
+    private static final String SECRET_KEY = PROPS.getProperty("app.secret_key", "clave_secreta_de_prueba");
+
     public static String getSecretKey() {
         return SECRET_KEY;
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // NUEVO: clave AES para cifrado de ficheros sensibles
-    // ═══════════════════════════════════════════════════════════════
-    // Se lee de la variable de entorno ERP_AES_KEY si está definida (producción).
-    // Si no, cae al valor de desarrollo. Cambiarlo en producción sin recompilar.
-    // IMPORTANTE: debe tener exactamente 16, 24 o 32 caracteres para AES-128/192/256.
-    public static final String AES_KEY = System.getenv("ERP_AES_KEY") != null
-            ? System.getenv("ERP_AES_KEY")
-            : "ErpClaveSegura32CaracteresExact!"; // 32 chars → AES-256
 }

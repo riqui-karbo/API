@@ -12,36 +12,62 @@ import java.util.List;
 
 /**
  * Pool de conexiones MySQL usando HikariCP.
- * La URL base incluye erp_sistema como base de datos por defecto.
+ * Host, puerto, usuario, contrasena y nombres de BD se leen
+ * desde db.properties a traves de AppConfig.
+ *
  * @author Grupo1
  */
 public class ConexionMysql {
 
     private static HikariDataSource ds;
-    private static final String URL = "jdbc:mysql://localhost:3306/mysql";
-    private static final String USUARIO = "root";
-    private static final String PWD = "";
 
+    // URL construida dinamicamente desde AppConfig (que lee db.properties)
+    private static String buildUrl() {
+        return "jdbc:mysql://"
+            + AppConfig.DB_HOST + ":"
+            + AppConfig.DB_PORT + "/"
+            + AppConfig.DB_SISTEMA
+            + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
+    }
+
+    /**
+     * Inicializa el pool de conexiones y crea las tablas de metadatos
+     * del ERP si no existen.
+     */
     public static void inicializar() {
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(URL + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true");
-        config.setUsername(USUARIO);
-        config.setPassword(PWD);
-        config.setMaximumPoolSize(10);
-        config.setMinimumIdle(2);
+        config.setJdbcUrl(buildUrl());
+        config.setUsername(AppConfig.DB_USUARIO);
+        config.setPassword(AppConfig.DB_PASSWORD);
+        config.setMaximumPoolSize(10); // Máximo 10 conexiones simultáneas
+        config.setMinimumIdle(2); // Mínimo 2 conexiones en espera
         config.setConnectionTimeout(30000);
         config.setIdleTimeout(600000);
         config.setMaxLifetime(1800000);
         ds = new HikariDataSource(config);
 
-        // Crear estructura ERP al arrancar
+        // Crear la BD y tablas de metadatos del ERP al arrancar
         crearEstructuraERP();
     }
 
+    /**
+     * Obtiene una conexión del pool SIN base de datos seleccionada.
+     * Usa conn.setCatalog(nombreBd) para cambiar de BD.
+     *
+     * @return Conexión de MySQL
+     * @throws java.sql.SQLException
+     */
     public static Connection getConexion() throws SQLException {
         return ds.getConnection();
     }
 
+    /**
+     * Obtiene una conexión del pool CON una base de datos específica.
+     *
+     * @param baseDatos Nombre de la base de datos
+     * @return Conexión de MySQL
+     * @throws java.sql.SQLException
+     */
     public static Connection getConexion(String baseDatos) throws SQLException {
         Connection conn = ds.getConnection();
         if (baseDatos != null && !baseDatos.trim().isEmpty()) {
@@ -50,18 +76,25 @@ public class ConexionMysql {
         return conn;
     }
 
+    /**
+     * Cierra el pool de conexiones.
+     */
     public static void cerrar() {
         if (ds != null) ds.close();
     }
 
-    // ── Crear tablas de metadatos del ERP si no existen ───────────────────
+    /**
+     * Crea la base de datos del sistema y las tablas de metadatos
+     * necesarias para el funcionamiento del ERP.
+     */
     private static void crearEstructuraERP() {
         try (Connection conn = getConexion(); Statement stmt = conn.createStatement()) {
+            // Base de datos del sistema ERP
+            stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + AppConfig.DB_SISTEMA + "` " +
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            stmt.execute("USE `" + AppConfig.DB_SISTEMA + "`");
 
-            stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS `erp_sistema` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            stmt.execute("USE `erp_sistema`");
-
-            // Tabla de configuración global
+            // Tabla de configuración global de la empresa
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_config` (" +
                 "  `clave` VARCHAR(100) PRIMARY KEY," +
@@ -70,7 +103,7 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Tabla de usuarios
+            // Tabla de usuarios de la aplicación
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_users` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -81,7 +114,7 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Tabla de módulos
+            // Tabla de módulos instalados
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_modulos` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -93,7 +126,7 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Metadatos de tablas (modulo_id nullable para auto-registro)
+            // Tabla de metadatos de tablas (modulo_id nullable para auto-registro)
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_meta_tablas` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -104,12 +137,16 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Asegurar que modulo_id sea nullable
+            // Asegurar que modulo_id sea nullable en instalaciones existentes
             try {
-                stmt.executeUpdate("ALTER TABLE `erp_meta_tablas` MODIFY `modulo_id` INT DEFAULT NULL");
-            } catch (SQLException ignored) {}
+                stmt.executeUpdate(
+                    "ALTER TABLE `erp_meta_tablas` MODIFY `modulo_id` INT DEFAULT NULL"
+                );
+            } catch (SQLException ignored) {
+                // Ya es nullable o no se puede cambiar
+            }
 
-            // Metadatos de columnas
+            // Tabla de metadatos de columnas
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_meta_columnas` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -128,7 +165,7 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Metadatos de relaciones
+            // Tabla de metadatos de relaciones
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_meta_relaciones` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -141,7 +178,7 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Roles y permisos
+            // Tabla de roles
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_roles` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -150,6 +187,7 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
+            // Tabla de permisos por rol
             stmt.executeUpdate(
                 "CREATE TABLE IF NOT EXISTS `erp_roles_permisos` (" +
                 "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
@@ -163,24 +201,23 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
-            // Asegurar BD del cliente
-            stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + AppConfig.DB_CLIENTE + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            // Asegurar que la BD del cliente exista
+            stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS `" + AppConfig.DB_CLIENTE + "` " +
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 
-            // Insertar roles por defecto si está vacío
+            // Insertar rol admin por defecto si la tabla esta vacia
             try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM `erp_roles`")) {
                 if (rs.next() && rs.getInt(1) == 0) {
-                    stmt.executeUpdate(
-                        "INSERT INTO `erp_roles` (nombre, descripcion) VALUES " +
+                    stmt.executeUpdate("INSERT INTO `erp_roles` (nombre, descripcion) VALUES " +
                         "('admin', 'Administrador con acceso total'), " +
-                        "('empleado', 'Empleado con acceso basico')"
-                    );
+                        "('empleado', 'Empleado con acceso basico')");
                     System.out.println("[API] Roles por defecto creados (admin, empleado).");
                 }
             }
 
             System.out.println("[API] Estructura de metadatos sincronizada.");
 
-            // Auto-registrar tablas existentes en la BD del cliente
+            // Auto-registrar tablas del cliente que falten
             autoRegistrarTablas();
 
         } catch (SQLException e) {
@@ -189,13 +226,16 @@ public class ConexionMysql {
         }
     }
 
-    // ── Auto-registro: escanea BD cliente y registra tablas sin metadatos ─
+    /**
+     * Escanea la base de datos del cliente (DB_CLIENTE) y registra
+     * automaticamente en erp_meta_tablas (+ erp_meta_columnas) cualquier
+     * tabla que aun no tenga metadatos.
+     */
     private static void autoRegistrarTablas() {
         String dbCliente = AppConfig.DB_CLIENTE;
         System.out.println("[API] Auto-registrando tablas de '" + dbCliente + "'...");
 
         try (Connection conn = getConexion(dbCliente)) {
-
             // 1. Obtener todas las tablas del cliente
             List<String> tablasCliente = new ArrayList<>();
             try (Statement stmt = conn.createStatement();
@@ -210,11 +250,12 @@ public class ConexionMysql {
                 return;
             }
 
-            // 2. Registrar las que falten en erp_meta_tablas
+            // 2. Por cada tabla, comprobar si ya esta registrada
             try (Connection connSistema = getConexion(AppConfig.DB_SISTEMA)) {
                 for (String tabla : tablasCliente) {
                     if (yaRegistrada(connSistema, tabla)) continue;
 
+                    // 3. Registrar la tabla
                     String nombreAmigable = tabla.replace("_", " ");
                     nombreAmigable = nombreAmigable.substring(0, 1).toUpperCase() + nombreAmigable.substring(1);
 
@@ -232,7 +273,7 @@ public class ConexionMysql {
 
                     if (tablaId == 0) continue;
 
-                    // 3. Registrar columnas usando DESCRIBE
+                    // 4. Registrar las columnas usando DESCRIBE
                     try (Statement stmtDesc = conn.createStatement();
                          ResultSet rsDesc = stmtDesc.executeQuery("DESCRIBE `" + tabla + "`")) {
                         while (rsDesc.next()) {
@@ -246,6 +287,7 @@ public class ConexionMysql {
                             boolean autoInc  = colExtra != null && colExtra.contains("auto_increment");
                             boolean esPK     = "PRI".equalsIgnoreCase(colKey);
                             boolean esUnico  = "UNI".equalsIgnoreCase(colKey) || esPK;
+
                             String tipoGenerico = mapearTipoMysql(colTipo);
 
                             try (PreparedStatement pstmtCol = connSistema.prepareStatement(
@@ -256,19 +298,22 @@ public class ConexionMysql {
                                 pstmtCol.setString(2, colNombre);
                                 pstmtCol.setString(3, tipoGenerico);
                                 pstmtCol.setBoolean(4, nullable);
-                                pstmtCol.setBoolean(5, colNombre.toLowerCase().contains("contrasena") || colNombre.toLowerCase().contains("password"));
-                                pstmtCol.setBoolean(6, true);   // visible
-                                pstmtCol.setBoolean(7, false);  // no sensible
-                                pstmtCol.setBoolean(8, false);  // no archivo
+                                pstmtCol.setBoolean(5, colNombre.toLowerCase().contains("contrasena")
+                                                       || colNombre.toLowerCase().contains("password"));
+                                pstmtCol.setBoolean(6, true);  // visible
+                                pstmtCol.setBoolean(7, false); // no sensible
+                                pstmtCol.setBoolean(8, false); // no archivo
                                 pstmtCol.setBoolean(9, autoInc);
                                 pstmtCol.setBoolean(10, esUnico);
                                 pstmtCol.executeUpdate();
                             }
                         }
                     }
+
                     System.out.println("[API] Tabla auto-registrada: " + tabla);
                 }
             }
+
             System.out.println("[API] Auto-registro completado.");
 
         } catch (SQLException e) {
@@ -286,24 +331,25 @@ public class ConexionMysql {
         }
     }
 
-    // ── Mapear tipo MySQL → tipo genérico de la API ───────────────────────
+    /**
+     * Mapea un tipo de dato MySQL al tipo generico de la API (TipoDatoMapper).
+     */
     private static String mapearTipoMysql(String tipoMysql) {
         if (tipoMysql == null) return "TEXTO_CORTO";
         String tipoUpper = tipoMysql.toUpperCase();
 
         if (tipoUpper.equals("TINYINT(1)")) return "BINARIO";
-        if (tipoUpper.startsWith("INT") || tipoUpper.startsWith("BIGINT") ||
-            tipoUpper.startsWith("SMALLINT") || tipoUpper.startsWith("TINYINT") ||
-            tipoUpper.startsWith("MEDIUMINT")) return "ENTERO";
-        if (tipoUpper.startsWith("DECIMAL") || tipoUpper.startsWith("DOUBLE") ||
-            tipoUpper.startsWith("FLOAT") || tipoUpper.startsWith("NUMERIC")) return "DECIMAL";
+        if (tipoUpper.startsWith("INT") || tipoUpper.startsWith("BIGINT")
+            || tipoUpper.startsWith("SMALLINT") || tipoUpper.startsWith("TINYINT")
+            || tipoUpper.startsWith("MEDIUMINT")) return "ENTERO";
+        if (tipoUpper.startsWith("DECIMAL") || tipoUpper.startsWith("DOUBLE")
+            || tipoUpper.startsWith("FLOAT") || tipoUpper.startsWith("NUMERIC")) return "DECIMAL";
         if (tipoUpper.startsWith("DATE") && !tipoUpper.startsWith("DATETIME")) return "FECHA";
         if (tipoUpper.startsWith("DATETIME") || tipoUpper.startsWith("TIMESTAMP")) return "FECHA_HORA";
-        if (tipoUpper.startsWith("TEXT") || tipoUpper.startsWith("LONGTEXT") ||
-            tipoUpper.startsWith("MEDIUMTEXT")) return "TEXTO_LARGO";
+        if (tipoUpper.startsWith("TEXT") || tipoUpper.startsWith("LONGTEXT")
+            || tipoUpper.startsWith("MEDIUMTEXT")) return "TEXTO_LARGO";
         if (tipoUpper.startsWith("BLOB") || tipoUpper.startsWith("LONGBLOB")) return "ARCHIVO";
         if (tipoUpper.startsWith("CHAR") && tipoUpper.contains("60")) return "CONTRASENA";
-
         return "TEXTO_CORTO";
     }
 }
