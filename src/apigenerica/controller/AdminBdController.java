@@ -360,4 +360,216 @@ public class AdminBdController {
             ctx.status(HttpCode.INTERNAL_SERVER_ERROR).json(ApiRespuesta.error("Sin conexion: " + e.getMessage()));
         }
     }
+
+    
+    
+// ════════════════════════════════════════════════════════
+// GET /backup/verificar — Estado del sistema de backups
+// Usado por la pagina de prueba. Sin JWT.
+// ════════════════════════════════════════════════════════
+    public void verificarBackup(Context ctx) {
+        // Comprobar si mysqldump esta disponible en el PATH del sistema
+        boolean mysqldumpDisponible = false;
+        try {
+            Process p = new ProcessBuilder("mysqldump", "--version")
+                    .redirectErrorStream(true).start();
+            p.waitFor();
+            mysqldumpDisponible = (p.exitValue() == 0);
+        } catch (Exception e) {
+            mysqldumpDisponible = false;
+        }
+
+        // Asegurarse de que la carpeta backups existe
+        File backupDir = new File("backups");
+        if (!backupDir.exists()) {
+            backupDir.mkdirs();
+        }
+
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("mysqldump_disponible", mysqldumpDisponible);
+        info.put("directorio_backups", backupDir.getAbsolutePath());
+        info.put("mysql_host", "localhost:3306");
+        info.put("directorio_existe", backupDir.exists());
+
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok(info));
+    }
+
+// ════════════════════════════════════════════════════════
+// POST /backup/crear — Backup de TODAS las BDs del cliente
+// Usado por la pagina de prueba. Sin JWT.
+// Reutiliza la logica de crearBackup() pero sin requerir
+// {nombre} en la ruta — hace backup de erp_empresa y erp_sistema.
+// ════════════════════════════════════════════════════════
+    public void crearBackupGeneral(Context ctx) {
+        String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new java.util.Date());
+        String fileName = "backup_general_" + timestamp + ".sql";
+        File backupDir = new File("backups");
+        if (!backupDir.exists()) {
+            backupDir.mkdirs();
+        }
+        File backupFile = new File(backupDir, fileName);
+
+        // Hacer backup de erp_sistema y erp_empresa en el mismo fichero
+        String[] bases = {"erp_sistema", "erp_empresa"};
+
+        try (PrintWriter pw = new PrintWriter(new FileWriter(backupFile))) {
+            pw.println("-- Backup general generado el " + timestamp);
+            pw.println("-- Bases: erp_sistema, erp_empresa");
+            pw.println();
+
+            for (String bd : bases) {
+                try (Connection conn = ConexionMysql.getConexion(bd); Statement stmt = conn.createStatement()) {
+
+                    pw.println("-- ========== BD: " + bd + " ==========");
+                    pw.println("CREATE DATABASE IF NOT EXISTS `" + bd + "` CHARACTER SET utf8mb4;");
+                    pw.println("USE `" + bd + "`;");
+                    pw.println();
+
+                    ResultSet rsTables = stmt.executeQuery("SHOW TABLES");
+                    List<String> tablas = new ArrayList<>();
+                    while (rsTables.next()) {
+                        tablas.add(rsTables.getString(1));
+                    }
+                    rsTables.close();
+
+                    for (String tabla : tablas) {
+                        try (ResultSet rsCreate = stmt.executeQuery(
+                                "SHOW CREATE TABLE `" + tabla + "`")) {
+                            if (rsCreate.next()) {
+                                pw.println("DROP TABLE IF EXISTS `" + tabla + "`;");
+                                pw.println(rsCreate.getString(2) + ";");
+                                pw.println();
+                            }
+                        }
+                        try (ResultSet rsData = stmt.executeQuery(
+                                "SELECT * FROM `" + tabla + "`")) {
+                            ResultSetMetaData meta = rsData.getMetaData();
+                            int cols = meta.getColumnCount();
+                            while (rsData.next()) {
+                                StringBuilder sb = new StringBuilder(
+                                        "INSERT INTO `" + tabla + "` VALUES (");
+                                for (int i = 1; i <= cols; i++) {
+                                    String val = rsData.getString(i);
+                                    if (val == null) {
+                                        sb.append("NULL");
+                                    } else {
+                                        sb.append("'").append(val.replace("'", "\\'")).append("'");
+                                    }
+                                    if (i < cols) {
+                                        sb.append(", ");
+                                    }
+                                }
+                                sb.append(");");
+                                pw.println(sb.toString());
+                            }
+                            pw.println();
+                        }
+                    }
+                } catch (SQLException e) {
+                    pw.println("-- ERROR al hacer backup de " + bd + ": " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            throw new BaseDatosException("Error al crear backup general.", e);
+        }
+
+        Map<String, Object> respuesta = new LinkedHashMap<>();
+        respuesta.put("nombre", fileName);
+        respuesta.put("archivo", backupFile.getAbsolutePath());
+        respuesta.put("tamano", backupFile.length());
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
+    }
+
+// ════════════════════════════════════════════════════════
+// GET /backup/listar — Lista los ficheros .sql en /backups
+// Usado por la pagina de prueba. Sin JWT.
+// ════════════════════════════════════════════════════════
+    public void listarBackups(Context ctx) {
+        File backupDir = new File("backups");
+        List<Map<String, Object>> backups = new ArrayList<>();
+
+        if (backupDir.exists() && backupDir.isDirectory()) {
+            File[] ficheros = backupDir.listFiles(
+                    (dir, name) -> name.endsWith(".sql"));
+            if (ficheros != null) {
+                // Ordenar por fecha de modificacion, mas reciente primero
+                Arrays.sort(ficheros, (a, b)
+                        -> Long.compare(b.lastModified(), a.lastModified()));
+                for (File f : ficheros) {
+                    Map<String, Object> info = new LinkedHashMap<>();
+                    info.put("nombre", f.getName());
+                    info.put("tamano", f.length());
+                    info.put("fecha", f.lastModified());
+                    info.put("ruta", f.getAbsolutePath());
+                    backups.add(info);
+                }
+            }
+        }
+
+        Map<String, Object> resultado = new LinkedHashMap<>();
+        resultado.put("backups", backups);
+        resultado.put("total", backups.size());
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok(resultado));
+    }
+
+    
+// ════════════════════════════════════════════════════════
+// POST /backup/restaurar?backup=NOMBRE&confirmacion=CONFIRMAR
+// Ejecuta el .sql sobre la BD correspondiente.
+// Solo procede si confirmacion=CONFIRMAR (proteccion extra).
+// Usado por la pagina de prueba. Sin JWT.
+// ════════════════════════════════════════════════════════
+    public void restaurarBackup(Context ctx) {
+        String nombreBackup = ctx.queryParam("backup");
+        String confirmacion = ctx.queryParam("confirmacion");
+
+        if (nombreBackup == null || nombreBackup.trim().isEmpty()) {
+            throw new ValidacionException("Parametro 'backup' requerido.");
+        }
+        // Proteccion: la pagina envia confirmacion=CONFIRMAR antes de ejecutar
+        if (!"CONFIRMAR".equals(confirmacion)) {
+            throw new ValidacionException("Debes pasar confirmacion=CONFIRMAR para ejecutar la restauracion.");
+        }
+
+        File backupFile = new File("backups", nombreBackup);
+        if (!backupFile.exists()) {
+            throw new ValidacionException("El fichero de backup no existe: " + nombreBackup);
+        }
+
+        // Leer el SQL y ejecutarlo linea a linea
+        try (Connection conn = ConexionMysql.getConexion(); Statement stmt = conn.createStatement(); java.util.Scanner sc = new java.util.Scanner(backupFile, "UTF-8")) {
+
+            conn.setAutoCommit(false);
+            StringBuilder sentencia = new StringBuilder();
+
+            while (sc.hasNextLine()) {
+                String linea = sc.nextLine().trim();
+                // Ignorar comentarios y lineas vacias
+                if (linea.startsWith("--") || linea.isEmpty()) {
+                    continue;
+                }
+
+                sentencia.append(linea).append(" ");
+
+                // Ejecutar cuando encontramos el fin de sentencia
+                if (linea.endsWith(";")) {
+                    String sql = sentencia.toString().trim();
+                    if (!sql.isEmpty()) {
+                        stmt.execute(sql);
+                    }
+                    sentencia = new StringBuilder();
+                }
+            }
+            conn.commit();
+            conn.setAutoCommit(true);
+
+        } catch (Exception e) {
+            throw new BaseDatosException("Error al restaurar el backup '" + nombreBackup + "'.", e);
+        }
+
+        Map<String, Object> resultado = new LinkedHashMap<>();
+        resultado.put("backup_restaurado", nombreBackup);
+        resultado.put("mensaje", "Restauracion completada correctamente.");
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok(resultado));
+    }
 }
