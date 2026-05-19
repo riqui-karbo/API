@@ -29,10 +29,6 @@ public class SqlService {
 
     /**
      * Construye una sentencia CREATE TABLE
-     *
-     * @param tabla Metadatos de la tabla
-     * @param relaciones Datos de relaciones de la tabla
-     * @return SQL listo para ejecutar
      */
     public String generarCreateSql(TablaConfig tabla, List<RelacionConfig> relaciones) {
         try {
@@ -44,33 +40,28 @@ public class SqlService {
             StringBuilder sql = new StringBuilder("CREATE TABLE IF NOT EXISTS `" + nombreTabla + "` (");
             sql.append("`id` BIGINT AUTO_INCREMENT PRIMARY KEY, ");
 
-            // Crear columnas
             if (campos != null) {
                 for (int i = 0; i < campos.size(); i++) {
                     String sqlCol = construirDefinicionColumna(campos.get(i));
                     if (!sqlCol.isEmpty()) {
                         sql.append(sqlCol);
-                        sql.append(", "); // Separar de la siguiente columna
+                        sql.append(", ");
                     }
                 }
             }
 
-            // Añadir Foreign Keys
             if (relaciones != null && !relaciones.isEmpty()) {
                 for (int i = 0; i < relaciones.size(); i++) {
                     RelacionConfig rel = relaciones.get(i);
-
                     sql.append("CONSTRAINT `fk_").append(nombreTabla).append("_").append(rel.getTablaDestino()).append("` ")
                             .append("FOREIGN KEY (`").append(rel.getFkColumna()).append("`) ")
                             .append("REFERENCES `").append(rel.getTablaDestino()).append("`(`id`) ")
                             .append("ON DELETE CASCADE ON UPDATE CASCADE");
-
                     if (i < relaciones.size() - 1) {
                         sql.append(", ");
                     }
                 }
             }
-            // Quitar la última coma y espacio de las columnas
             if (sql.toString().endsWith(", ")) {
                 sql.setLength(sql.length() - 2);
             }
@@ -81,100 +72,49 @@ public class SqlService {
         }
     }
 
-    /**
-     * Construye una sentencia CREATE DATABASE
-     *
-     * @param nombreDb Nombre de la base de datos
-     * @return SQL listo para ejecutar
-     */
     public String generarCreateDbSql(String nombreDb) {
         return "CREATE DATABASE IF NOT EXISTS `" + nombreDb
                 + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
     }
 
-    /**
-     * Construye una sentencia ALTER TABLE ADD COLUMN
-     *
-     * @param tabla Nombre de la tabla que se modificará
-     * @param col Metadatos de la columna a añadir
-     * @return SQL listo para ejecutar
-     */
     public String generarAddColumnSql(String tabla, ColumnaConfig col) {
         validador.validarNombre(tabla);
         validador.validarNombre(col.getNombre());
-        
         String sqlCol = construirDefinicionColumna(col);
         if (sqlCol.isEmpty()) {
-            throw new IllegalArgumentException("Definición de columna no válida.");
+            throw new IllegalArgumentException("Definicion de columna no valida.");
         }
-        return String.format("ALTER TABLE `%s` ADD COLUMN `%s`", tabla, sqlCol);
+        return String.format("ALTER TABLE `%s` ADD COLUMN %s", tabla, sqlCol);
     }
 
-    /**
-     * Construye una sentencia ALTER TABLE DROP COLUMN
-     *
-     * @param tabla Nombre de la tabla que se modificará
-     * @param nombreColumna Nombre de la columna que se eliminará
-     * @return SQL listo para ejecutar
-     */
     public String generarDropColumnSql(String tabla, String nombreColumna) {
         validador.validarNombre(tabla);
         validador.validarNombre(nombreColumna);
         return String.format("ALTER TABLE `%s` DROP COLUMN `%s`", tabla, nombreColumna);
     }
 
-    /**
-     * Construye una sentencia ALTER TABLE MODIFY COLUMN
-     *
-     * @param tabla Nombre de la tabla que se modificará
-     * @param col Nombre de la columna que se modificará
-     * @return SQL listo para ejecutar
-     */
     public String generarModifyColumnSql(String tabla, ColumnaConfig col) {
         validador.validarNombre(tabla);
         validador.validarNombre(col.getNombre());
-        
         String definicion = construirDefinicionColumna(col);
         if (definicion.isEmpty()) {
-            throw new IllegalArgumentException("Definición de columna no válida.");
+            throw new IllegalArgumentException("Definicion de columna no valida.");
         }
-        return String.format("ALTER TABLE `%s` MODIFY COLUMN `%s`", tabla, definicion);
+        return String.format("ALTER TABLE `%s` MODIFY COLUMN %s", tabla, definicion);
     }
- 
-    /**
-     * Construye una sentencia ALTER TABLE RENAME COLUMN
-     * 
-     * @param tabla Nombre de la tabla que se modificará
-     * @param nombreColumna Nombre actual de la columna
-     * @param nuevoNombre Nombre nuevo de la columna
-     * @return 
-     */
+
     public String generarRenameColumnSql(String tabla, String nombreColumna, String nuevoNombre) {
         validador.validarNombre(tabla);
         validador.validarNombre(nombreColumna);
         validador.validarNombre(nuevoNombre);
-        
         return String.format("ALTER TABLE `%s` RENAME COLUMN `%s` TO `%s`", tabla, nombreColumna, nuevoNombre);
     }
 
-    /**
-     * Construye una sentencia DROP table
-     *
-     * @param nombreTabla Nombre de la tabla a borrar
-     * @return SQL listo para ejecutar
-     */
     public String generarDropSql(String nombreTabla) {
         validador.validarNombre(nombreTabla);
         return "DROP TABLE IF EXISTS `" + nombreTabla + "`;";
     }
 
-    /**
-     * Ejecutar un script SQL
-     *
-     * @param db Base de datos en la que se ejecutará la sentencia
-     * @param sql Sentencia a ejecutar
-     * @throws SQLException
-     */
     public void ejecutarSql(String db, String sql) throws SQLException {
         try (Connection conn = ConexionMysql.getConexion(db); Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
@@ -185,39 +125,39 @@ public class SqlService {
     }
 
     /**
-     * Construye la definición SQL completa de una columna (tipo, NOT NULL,
-     * DEFAULT, etc.)
+     * Construye la definicion SQL de una columna.
      *
-     * @param columna Metadatos de la columna
-     * @return String SQL construido
+     * COLUMNAS SENSIBLES: en MySQL solo se crea un placeholder VARCHAR(1) NULL DEFAULT NULL.
+     * El valor real se cifra y almacena exclusivamente en Paradox (base_paradox.db).
+     * MySQL nunca vera ni guardara el dato sensible real.
      */
     private String construirDefinicionColumna(ColumnaConfig columna) {
         StringBuilder sql = new StringBuilder();
 
-        // Si el usuario envió una columna llamada id, se ignora
         if (columna.getNombre().equalsIgnoreCase("id")) {
             return "";
         }
 
-        // Nombre y tipo
+        // Columna sensible -> solo placeholder en MySQL, dato real va a Paradox
+        if (columna.isSensible()) {
+            sql.append("`").append(columna.getNombre()).append("` VARCHAR(1) NULL DEFAULT NULL");
+            return sql.toString();
+        }
+
         sql.append("`").append(columna.getNombre()).append("` ").append(TipoDatoMapper.toSql(columna.getTipo()));
 
-        // NOT NULL
         if (!columna.isNullable()) {
             sql.append(" NOT NULL");
         }
 
-        // DEFAULT
         if (columna.getValorDefecto() != null && !columna.isAutoincremental()) {
             sql.append(" DEFAULT '").append(columna.getValorDefecto()).append("'");
         }
 
-        // AUTO_INCREMENT
         if (columna.isAutoincremental() && TipoDatoMapper.toSql(columna.getTipo()).contains("INT")) {
             sql.append(" AUTO_INCREMENT");
         }
 
-        // UNIQUE
         if (columna.isUnico()) {
             sql.append(" UNIQUE");
         }
