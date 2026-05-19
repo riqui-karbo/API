@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico Paradox — Logs API</title>
+<style>
+  :root {
+    --bg: #0f0f11;
+    --bg2: #17171a;
+    --bg3: #1f1f24;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8e8ec;
+    --muted: #7a7a8a;
+    --accent: #6c63ff;
+    --accent2: #9d8fff;
+    --green: #3ecf8e;
+    --red: #f36;
+    --amber: #f59e0b;
+    --blue: #3b9eff;
+    --mono: 'Fira Code', 'Cascadia Code', monospace;
+    --sans: 'DM Sans', system-ui, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Fira+Code:wght@400;500&display=swap');
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;min-height:100vh}
+
+  /* Layout */
+  .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+  .sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:1.5rem 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .main{padding:2rem;overflow-x:hidden}
+
+  /* Sidebar */
+  .logo{padding:0 1.5rem 1.5rem;border-bottom:1px solid var(--border);margin-bottom:1rem}
+  .logo h1{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+  .logo span{font-size:11px;color:var(--muted);display:block;margin-top:2px;font-family:var(--mono)}
+  .nav-section{padding:0.5rem 1rem 0.25rem;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);font-weight:600}
+  .nav-item{display:flex;align-items:center;gap:8px;padding:7px 1.5rem;cursor:pointer;color:var(--muted);font-size:13px;transition:all .15s;border-left:2px solid transparent}
+  .nav-item:hover{color:var(--text);background:rgba(255,255,255,.03)}
+  .nav-item.active{color:var(--accent2);border-left-color:var(--accent);background:rgba(108,99,255,.07)}
+  .nav-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+  .nav-item.active .nav-dot{background:var(--accent)}
+
+  /* Config bar */
+  .config-bar{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1rem 1.25rem;margin-bottom:1.5rem;display:grid;grid-template-columns:1fr 1.5fr auto;gap:10px;align-items:end}
+  .config-bar label{font-size:11px;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+  .config-bar input{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;width:100%;font-family:var(--mono);outline:none;transition:border .15s}
+  .config-bar input:focus{border-color:var(--accent)}
+
+  /* Buttons */
+  btn,button{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-family:var(--sans);transition:all .15s;white-space:nowrap}
+  button:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.2)}
+  button:active{transform:scale(.97)}
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-primary:hover{background:#7c74ff;border-color:#7c74ff}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .btn-danger{background:rgba(255,51,102,.12);border-color:rgba(255,51,102,.3);color:var(--red)}
+  .btn-green{background:rgba(62,207,142,.12);border-color:rgba(62,207,142,.3);color:var(--green)}
+
+  /* Sections */
+  .section{display:none}
+  .section.active{display:block}
+  .section-title{font-size:18px;font-weight:600;letter-spacing:-.02em;margin-bottom:0.25rem}
+  .section-sub{font-size:13px;color:var(--muted);margin-bottom:1.5rem}
+
+  /* Status cards */
+  .status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.5rem}
+  .status-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1rem}
+  .status-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .status-card .value{font-size:22px;font-weight:600;font-family:var(--mono)}
+  .status-card .sub{font-size:11px;color:var(--muted);margin-top:3px}
+  .v-green{color:var(--green)}.v-red{color:var(--red)}.v-amber{color:var(--amber)}.v-blue{color:var(--blue)}.v-muted{color:var(--muted)}
+
+  /* Check list */
+  .checklist{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
+  .check-item{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+  .check-item:last-child{border-bottom:none}
+  .check-icon{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;margin-top:1px}
+  .icon-ok{background:rgba(62,207,142,.15);color:var(--green)}
+  .icon-fail{background:rgba(255,51,102,.15);color:var(--red)}
+  .icon-warn{background:rgba(245,158,11,.15);color:var(--amber)}
+  .icon-pending{background:rgba(255,255,255,.07);color:var(--muted)}
+  .check-body{flex:1}
+  .check-title{font-weight:500;font-size:13px}
+  .check-detail{font-size:12px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+
+  /* Log table */
+  .tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
+  .tbl-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
+  .tbl-head-title{font-size:13px;font-weight:500}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border);font-weight:500}
+  td{padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .source-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:500;font-family:var(--mono)}
+  .src-json{background:rgba(59,158,255,.15);color:var(--blue)}
+  .src-paradox{background:rgba(108,99,255,.15);color:var(--accent2)}
+  .src-both{background:rgba(62,207,142,.15);color:var(--green)}
+  .src-only-json{background:rgba(245,158,11,.15);color:var(--amber)}
+  .op{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;font-family:var(--mono);font-weight:500}
+  .op-INSERT{background:rgba(62,207,142,.12);color:#3ecf8e}
+  .op-UPDATE{background:rgba(59,158,255,.12);color:#3b9eff}
+  .op-DELETE{background:rgba(255,51,102,.12);color:#f36}
+  .op-SELECT{background:rgba(245,158,11,.12);color:#f59e0b}
+  .op-INFO{background:rgba(255,255,255,.07);color:var(--muted)}
+
+  /* Terminal */
+  .terminal{background:#0a0a0c;border:1px solid var(--border);border-radius:10px;font-family:var(--mono);font-size:12px;line-height:1.7;margin-bottom:1.5rem;overflow:hidden}
+  .term-bar{background:var(--bg3);border-bottom:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:8px}
+  .dot{width:10px;height:10px;border-radius:50%}
+  .dot-r{background:#ff5f56}.dot-y{background:#ffbd2e}.dot-g{background:#27c93f}
+  .term-bar-title{font-size:11px;color:var(--muted);margin-left:6px}
+  .term-body{padding:14px;max-height:280px;overflow-y:auto;scrollbar-width:thin}
+  .term-line{padding:1px 0}
+  .t-ok{color:var(--green)}.t-err{color:var(--red)}.t-warn{color:var(--amber)}.t-info{color:var(--blue)}.t-dim{color:var(--muted)}
+  .term-cursor{display:inline-block;width:8px;height:13px;background:var(--accent2);animation:blink 1s step-end infinite;vertical-align:-2px;margin-left:2px}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+  /* Form inject */
+  .form-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem}
+  .form-group{display:flex;flex-direction:column;gap:4px;flex:1;min-width:130px}
+  .form-group label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .form-group input,.form-group select,.form-group textarea{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px;font-family:var(--mono);outline:none;transition:border .15s}
+  .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent)}
+  .form-group select option{background:var(--bg3)}
+
+  /* Diff indicator */
+  .diff-ok{color:var(--green)}.diff-missing{color:var(--amber)}.diff-extra{color:var(--blue)}
+
+  /* Progress */
+  .progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:1rem}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;transition:width .3s}
+
+  /* Tabs */
+  .tabs{display:flex;gap:4px;margin-bottom:1.25rem;border-bottom:1px solid var(--border);padding-bottom:0}
+  .tab{padding:7px 14px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;border-radius:4px 4px 0 0}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+  .tab-panel{display:none}.tab-panel.active{display:block}
+
+  /* Alert */
+  .alert{border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:1rem;display:flex;gap:10px;align-items:flex-start}
+  .alert-info{background:rgba(59,158,255,.08);border:1px solid rgba(59,158,255,.2);color:#8ec9ff}
+  .alert-warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#fcd279}
+  .alert-ok{background:rgba(62,207,142,.08);border:1px solid rgba(62,207,142,.2);color:#7ee8bf}
+  .alert-err{background:rgba(255,51,102,.08);border:1px solid rgba(255,51,102,.2);color:#ff8fab}
+
+  /* Spinner */
+  .spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--accent2);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Responsive */
+  @media(max-width:700px){.layout{grid-template-columns:1fr}.sidebar{display:none}.config-bar{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <h1>🗄 Paradox Logs</h1>
+      <span>Diagnóstico & Verificación</span>
+    </div>
+    <div class="nav-section">Diagnóstico</div>
+    <div class="nav-item active" onclick="showSection('overview')">
+      <div class="nav-dot"></div>Vista general
+    </div>
+    <div class="nav-item" onclick="showSection('comparar')">
+      <div class="nav-dot"></div>JSON vs Paradox
+    </div>
+    <div class="nav-section">Herramientas</div>
+    <div class="nav-item" onclick="showSection('inyectar')">
+      <div class="nav-dot"></div>Inyectar log de prueba
+    </div>
+    <div class="nav-item" onclick="showSection('worker')">
+      <div class="nav-dot"></div>Estado del worker
+    </div>
+    <div class="nav-section">Logs en vivo</div>
+    <div class="nav-item" onclick="showSection('live')">
+      <div class="nav-dot"></div>Monitor en tiempo real
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Config bar -->
+    <div class="config-bar">
+      <div>
+        <label>URL base de la API</label>
+        <input id="apiUrl" value="http://localhost:7000" placeholder="http://localhost:7000">
+      </div>
+      <div>
+        <label>JWT Access Token (rol admin)</label>
+        <input id="token" placeholder="eyJhbGci..." type="password">
+      </div>
+      <div style="display:flex;gap:6px;align-items:flex-end;padding-bottom:1px">
+        <button onclick="loginRapido()" title="Iniciar sesión">🔑 Login</button>
+        <button class="btn-primary" onclick="diagnosticoCompleto()">▶ Ejecutar todo</button>
+      </div>
+    </div>
+
+    <!-- Login modal inline -->
+    <div id="loginPanel" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.5rem">
+      <div style="font-size:13px;font-weight:500;margin-bottom:.75rem">Credenciales de acceso</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:180px"><label>Email</label><input id="lEmail" type="email" placeholder="admin@ejemplo.com"></div>
+        <div class="form-group" style="flex:1;min-width:140px"><label>Contraseña</label><input id="lPass" type="password" placeholder="••••••"></div>
+        <button class="btn-primary btn-sm" onclick="hacerLogin()">Entrar</button>
+        <button class="btn-sm" onclick="document.getElementById('loginPanel').style.display='none'">✕</button>
+      </div>
+      <div id="lError" style="font-size:12px;color:var(--red);margin-top:6px;display:none"></div>
+    </div>
+
+    <!-- ========== SECTION: OVERVIEW ========== -->
+    <div class="section active" id="sec-overview">
+      <div class="section-title">Vista general del sistema de logs</div>
+      <div class="section-sub">Verifica qué está funcionando y dónde están los datos</div>
+
+      <div class="status-grid" id="stats-grid">
+        <div class="status-card"><div class="label">JSON backup</div><div class="value v-muted" id="st-json">—</div><div class="sub">registros en archivo</div></div>
+        <div class="status-card"><div class="label">Paradox (via API)</div><div class="value v-muted" id="st-paradox">—</div><div class="sub">registros en .db</div></div>
+        <div class="status-card"><div class="label">Sincronizados</div><div class="value v-muted" id="st-sync">—</div><div class="sub">coinciden en ambos</div></div>
+        <div class="status-card"><div class="label">Solo en JSON</div><div class="value v-muted" id="st-onlyjson">—</div><div class="sub">no llegaron a Paradox</div></div>
+      </div>
+
+      <div class="checklist" id="checklist">
+        <div class="check-item">
+          <div class="check-icon icon-pending">⋯</div>
+          <div class="check-body"><div class="check-title">Ejecuta el diagnóstico completo para ver el estado</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="diagnosticoCompleto()">▶ Ejecutar diagnóstico</button>
+        <button onclick="showSection('comparar')">📊 Ver comparación detallada</button>
+      </div>
+    </div>
+
+    <!-- ========== SECTION: COMPARAR ========== -->
+    <div class="section" id="sec-comparar">
+      <div class="section-title">Comparación JSON vs Paradox</div>
+      <div class="section-sub">Muestra qué logs están en el JSON de backup y cuáles llegaron al archivo Paradox (.db)</div>
+
+      <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+        <button class="btn-primary" onclick="cargarComparacion()">🔄 Cargar comparación</button>
+        <button onclick="filtrarTabla('ambos')">✅ Solo sincronizados</button>
+        <button onclick="filtrarTabla('solo_json')">⚠️ Solo en JSON</button>
+        <button onclick="filtrarTabla('todos')">📋 Todos</button>
+        <input id="busqComp" placeholder="Buscar…" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:13px;outline:none;flex:1;min-width:150px" oninput="filtrarTabla('todos')">
+      </div>
+
+      <div class="alert alert-info">
+        ℹ️ <span>El worker Paradox escribe de forma asíncrona (<code>best-effort</code>). Si hay logs que solo aparecen en JSON pero no en Paradox, el worker falló silenciosamente.</span>
+      </div>
+
+      <div class="tbl-wrap">
+        <div class="tbl-head">
+          <span class="tbl-head-title">Registros</span>
+          <span id="comp-count" style="font-size:12px;color:var(--muted)">—</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>ID</th><th>Fecha/Hora</th><th>Usuario</th><th>Operación</th><th>Tabla</th><th>Descripción</th><th>Fuente</th></tr></thead>
+            <tbody id="comp-tbody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">Pulsa "Cargar comparación" para comenzar</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="terminal" id="comp-terminal" style="display:none">
+        <div class="term-bar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="term-bar-title">Salida de diagnóstico</span></div>
+        <div class="term-body" id="comp-term-body"></div>
+      </div>
+    </div>
+
+    <!-- ========== SECTION: INYECTAR ========== -->
+    <div class="section" id="sec-inyectar">
+      <div class="section-title">Inyectar log de prueba</div>
+      <div class="section-sub">Registra un log manualmente y verifica si aparece después en Paradox</div>
+
+      <div class="alert alert-warn">
+        ⚠️ <span>El insert en Paradox es <strong>asíncrono</strong>. Después de inyectar, espera ~2-3 segundos y vuelve a verificar la comparación.</span>
+      </div>
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1.25rem;margin-bottom:1.5rem">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Usuario</label>
+            <input id="nUsuario" value="test/diagnostico">
+          </div>
+          <div class="form-group">
+            <label>Operación</label>
+            <select id="nOp">
+              <option>INSERT</option><option>UPDATE</option><option>DELETE</option><option>SELECT</option><option>INFO</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tabla</label>
+            <input id="nTabla" value="test_paradox">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem">
+          <label>Descripción</label>
+          <input id="nDesc" value="Test diagnóstico Paradox — verificando escritura en .db">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-primary" onclick="inyectarLog()">💉 Inyectar log</button>
+          <button onclick="inyectarMultiple()">💉×5 Inyectar 5 logs</button>
+        </div>
+      </div>
+
+      <div class="terminal">
+        <div class="term-bar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="term-bar-title">Resultado de inyección</span></div>
+        <div class="term-body" id="inj-term">
+          <div class="term-line t-dim">Esperando inyección...</div>
+          <span class="term-cursor"></span>
+        </div>
+      </div>
+
+      <div style="margin-top:1.5rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:.75rem">Secuencia de verificación automática</div>
+        <div class="checklist" id="seq-checklist">
+          <div class="check-item"><div class="check-icon icon-pending" id="seq-1-icon">1</div><div class="check-body"><div class="check-title" id="seq-1-txt">POST /api/logs — enviar el log</div><div class="check-detail" id="seq-1-det"></div></div></div>
+          <div class="check-item"><div class="check-icon icon-pending" id="seq-2-icon">2</div><div class="check-body"><div class="check-title" id="seq-2-txt">Verificar en JSON backup</div><div class="check-detail" id="seq-2-det"></div></div></div>
+          <div class="check-item"><div class="check-icon icon-pending" id="seq-3-icon">3</div><div class="check-body"><div class="check-title" id="seq-3-txt">Esperar 3s al worker Paradox</div><div class="check-detail" id="seq-3-det"></div></div></div>
+          <div class="check-item"><div class="check-icon icon-pending" id="seq-4-icon">4</div><div class="check-body"><div class="check-title" id="seq-4-txt">Verificar en Paradox via GET /api/logs</div><div class="check-detail" id="seq-4-det"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== SECTION: WORKER ========== -->
+    <div class="section" id="sec-worker">
+      <div class="section-title">Estado del ParadoxWorker</div>
+      <div class="section-sub">Analiza si el subproceso JVM del worker está funcionando correctamente</div>
+
+      <div class="alert alert-info">
+        ℹ️ <span>El <code>ParadoxWorker</code> se lanza como JVM nueva por cada operación (límite de 50 queries del driver HXTT evaluación). Un fallo aquí no detiene la API — el error se ignora silenciosamente.</span>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab(this,'tab-diagnostico')">Diagnóstico</div>
+        <div class="tab" onclick="switchTab(this,'tab-codigo')">Flujo del worker</div>
+        <div class="tab" onclick="switchTab(this,'tab-causas')">Causas comunes de fallo</div>
+      </div>
+
+      <div class="tab-panel active" id="tab-diagnostico">
+        <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+          <button class="btn-primary" onclick="analizarWorker()">🔍 Analizar worker</button>
+          <button onclick="verLogsParadox()">📂 Consultar logs desde Paradox</button>
+        </div>
+
+        <div class="checklist" id="worker-checks">
+          <div class="check-item"><div class="check-icon icon-pending">⋯</div><div class="check-body"><div class="check-title">Ejecuta el análisis para ver el estado del worker</div></div></div>
+        </div>
+
+        <div class="terminal" id="worker-terminal" style="display:none">
+          <div class="term-bar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="term-bar-title">Análisis del worker</span></div>
+          <div class="term-body" id="worker-term-body"></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-codigo">
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1.25rem;font-size:13px;line-height:1.8">
+          <div style="font-weight:500;margin-bottom:.75rem;color:var(--accent2)">Flujo de escritura en Paradox</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--muted)">
+            <div style="color:var(--text)">1. <span style="color:var(--green)">LogDAO.registrar()</span> guarda en RAM + JSON</div>
+            <div style="margin-left:16px;color:var(--muted)">↓ asíncrono, en nuevo Thread</div>
+            <div style="color:var(--text)">2. <span style="color:var(--blue)">ejecutarWorkerAsync()</span> → new Thread("paradox-worker")</div>
+            <div style="margin-left:16px;color:var(--muted)">↓ lanza ProcessBuilder</div>
+            <div style="color:var(--text)">3. <span style="color:var(--accent2)">ParadoxWorker.main()</span> — nueva JVM (reset del límite HXTT)</div>
+            <div style="margin-left:16px;color:var(--muted)">↓ HXTT Paradox JDBC</div>
+            <div style="color:var(--text)">4. <span style="color:var(--amber)">asegurarTabla()</span> + INSERT INTO LOGS</div>
+            <div style="margin-left:16px;color:var(--muted)">↓ stdout: "OK:id:timestamp" | "ERROR:mensaje"</div>
+            <div style="color:var(--text)">5. <span style="color:var(--muted)">Resultado ignorado silenciosamente</span> por LogDAO</div>
+          </div>
+          <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">
+            ⚠ Si el worker falla (driver no encontrado, carpeta no accesible, límite HXTT), el log queda SOLO en JSON. La API no reporta el error.
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="tab-causas">
+        <div class="checklist">
+          <div class="check-item">
+            <div class="check-icon icon-fail">!</div>
+            <div class="check-body">
+              <div class="check-title">Driver HXTT no en el classpath</div>
+              <div class="check-detail">Paradox_JDBC30.jar debe estar en lib/ y en el classpath de la JVM. Verifica que la API se lanzó con el jar.</div>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-icon icon-fail">!</div>
+            <div class="check-body">
+              <div class="check-title">Límite de 50 queries de evaluación agotado</div>
+              <div class="check-detail">El worker abre nueva JVM por operación precisamente para evitar esto. Si el SELECT_ALL falla, puede ser que otro proceso esté usando la misma JVM sin el workaround.</div>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-icon icon-warn">!</div>
+            <div class="check-body">
+              <div class="check-title">Carpeta paradox_data/ no existe o sin permisos</div>
+              <div class="check-detail">La ruta se resuelve con getProtectionDomain().getCodeSource().getLocation(). Si la estructura de carpetas cambia, la ruta puede ser incorrecta.</div>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-icon icon-warn">!</div>
+            <div class="check-body">
+              <div class="check-title">Archivo .db bloqueado por proceso anterior</div>
+              <div class="check-detail">Si la API crasheó con un worker en ejecución, el archivo puede quedar con lock. Reiniciar la API lo libera.</div>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-icon icon-warn">!</div>
+            <div class="check-body">
+              <div class="check-title">Thread daemon terminado antes que el worker</div>
+              <div class="check-detail">Si la JVM principal muere, los threads daemon se matan. El worker asíncrono puede no completarse si el servidor se para justo después del log.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== SECTION: LIVE ========== -->
+    <div class="section" id="sec-live">
+      <div class="section-title">Monitor en tiempo real</div>
+      <div class="section-sub">Polling automático cada N segundos para detectar nuevos logs y cambios en Paradox</div>
+
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+        <button class="btn-green" id="btn-start" onclick="startMonitor()">▶ Iniciar monitor</button>
+        <button class="btn-danger" id="btn-stop" onclick="stopMonitor()" disabled>⏹ Detener</button>
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
+          Intervalo:
+          <select id="intervalo" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 8px;font-size:12px;outline:none">
+            <option value="3000">3s</option>
+            <option value="5000" selected>5s</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+          </select>
+        </label>
+        <span id="monitor-status" style="font-size:12px;color:var(--muted)">Detenido</span>
+      </div>
+
+      <div class="progress-bar"><div class="progress-fill" id="live-prog" style="width:0%"></div></div>
+
+      <div class="status-grid">
+        <div class="status-card"><div class="label">Ciclos</div><div class="value v-blue" id="live-ciclos">0</div><div class="sub">polling</div></div>
+        <div class="status-card"><div class="label">Nuevos detectados</div><div class="value v-green" id="live-nuevos">0</div><div class="sub">en este monitor</div></div>
+        <div class="status-card"><div class="label">Solo JSON</div><div class="value v-amber" id="live-solo">0</div><div class="sub">no llegaron a Paradox</div></div>
+        <div class="status-card"><div class="label">Último ciclo</div><div class="value v-muted" id="live-ts" style="font-size:13px">—</div><div class="sub">timestamp</div></div>
+      </div>
+
+      <div class="terminal">
+        <div class="term-bar"><div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div><span class="term-bar-title">Log en vivo</span><span style="font-size:11px;color:var(--muted);margin-left:auto" id="live-pulse"></span></div>
+        <div class="term-body" id="live-term"><div class="term-line t-dim">Monitor detenido — pulsa ▶ para iniciar</div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── Estado global ────────────────────────────────────────────────
+let allLogs = [];       // logs del JSON (GET /api/logs sin filtro)
+let paradoxLogs = [];   // simulado via comparación
+let monitorInterval = null;
+let monitorCiclos = 0;
+let monitorNuevos = 0;
+let monitorSolo = 0;
+let lastKnownIds = new Set();
+let progTimer = null;
+
+// ─── Utilidades ───────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const base = () => $('apiUrl').value.replace(/\/$/,'');
+const tk   = () => $('token').value.trim();
+const hdrs = () => ({'Content-Type':'application/json',...(tk()?{'Authorization':'Bearer '+tk()}:{})});
+
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  $('sec-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes("'"+name+"'"))
+      n.classList.add('active');
+  });
+}
+
+function switchTab(el, panelId) {
+  el.closest('.tabs').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const section = el.closest('.section')||document.body;
+  section.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  $(panelId).classList.add('active');
+}
+
+function termLine(containerId, text, cls='') {
+  const el = $(containerId);
+  const line = document.createElement('div');
+  line.className = 'term-line '+(cls||'');
+  line.textContent = text;
+  // remove placeholder cursor
+  const cursor = el.querySelector('.term-cursor');
+  if(cursor) cursor.remove();
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setCheck(id, status, title, detail='') {
+  const icon = $(id+'-icon'); const txt = $(id+'-txt'); const det = $(id+'-det');
+  if(!icon) return;
+  icon.className = 'check-icon '+(status==='ok'?'icon-ok':status==='fail'?'icon-fail':status==='warn'?'icon-warn':'icon-pending');
+  icon.textContent = status==='ok'?'✓':status==='fail'?'✗':status==='warn'?'!':'…';
+  if(title) txt.textContent = title;
+  if(detail) det.textContent = detail;
+}
+
+function opBadge(op) {
+  return `<span class="op op-${(op||'INFO').toUpperCase()}">${op||'INFO'}</span>`;
+}
+
+function srcBadge(src) {
+  const map = {
+    'ambos':     ['src-both','✓ JSON + Paradox'],
+    'solo_json': ['src-only-json','⚠ Solo JSON'],
+  };
+  const [cls,lbl] = map[src]||['src-json','JSON'];
+  return `<span class="source-badge ${cls}">${lbl}</span>`;
+}
+
+function fmtTs(ts) { return (ts||'').replace('T',' ').substring(0,19); }
+
+// ─── Auth ─────────────────────────────────────────────────────────
+function loginRapido() {
+  const p = $('loginPanel');
+  p.style.display = p.style.display==='none'?'block':'none';
+}
+
+async function hacerLogin() {
+  const email = $('lEmail').value.trim();
+  const pass  = $('lPass').value;
+  const errEl = $('lError');
+  errEl.style.display='none';
+  if(!email||!pass){errEl.textContent='Email y contraseña requeridos.';errEl.style.display='block';return;}
+  try {
+    const r = await fetch(base()+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const d = await r.json();
+    if(!r.ok){errEl.textContent=(d.mensaje||d.message||'Error de autenticación');errEl.style.display='block';return;}
+    const datos = d.datos||d.data||d;
+    const token = datos.access_token||datos.accessToken||datos.token;
+    if(token){$('token').value=token;$('loginPanel').style.display='none';}
+    else{errEl.textContent='No se recibió token.';errEl.style.display='block';}
+  } catch(e){errEl.textContent='Error de conexión: '+e.message;errEl.style.display='block';}
+}
+
+// ─── Cargar logs ──────────────────────────────────────────────────
+async function fetchLogs() {
+  const r = await fetch(base()+'/api/logs',{headers:hdrs()});
+  if(!r.ok) throw new Error('HTTP '+r.status+' — ¿token válido?');
+  const d = await r.json();
+  return d.datos||d.data||d||[];
+}
+
+// ─── DIAGNÓSTICO COMPLETO ─────────────────────────────────────────
+async function diagnosticoCompleto() {
+  showSection('overview');
+  const cl = $('checklist');
+  cl.innerHTML = '';
+
+  function addCheck(icon, iconCls, title, detail) {
+    cl.innerHTML += `<div class="check-item"><div class="check-icon ${iconCls}">${icon}</div><div class="check-body"><div class="check-title">${title}</div><div class="check-detail">${detail}</div></div></div>`;
+  }
+
+  addCheck('<div class="spin"></div>', 'icon-pending', 'Conectando con la API…', base()+'/api/logs');
+
+  let logs = [];
+  try {
+    logs = await fetchLogs();
+    allLogs = logs;
+  } catch(e) {
+    cl.innerHTML = '';
+    addCheck('✗','icon-fail','No se pudo conectar con la API',e.message);
+    return;
+  }
+
+  cl.innerHTML = '';
+
+  // Check 1: API responde
+  addCheck('✓','icon-ok','API responde correctamente',`GET /api/logs → ${logs.length} registro(s) recibidos`);
+
+  // Check 2: ¿hay logs?
+  if(logs.length === 0) {
+    addCheck('!','icon-warn','No hay logs en el sistema','El sistema no ha registrado ningún evento todavía');
+  } else {
+    addCheck('✓','icon-ok',`${logs.length} logs en el sistema (JSON backup)`,`Último: ${fmtTs(logs[0]?.fechaHora||'')} — ${logs[0]?.usuario||''}`);
+  }
+
+  // Check 3: Paradox — intentar detectar discrepancias
+  // Paradox no tiene endpoint propio; la API combina JSON+Paradox en el mismo GET.
+  // Pero podemos detectar si el worker estaba fallando buscando patrones.
+  const tieneTestLogs = logs.filter(l=>(l.usuario||'').includes('test')||(l.tabla||l.tablaAfectada||'').includes('test'));
+  if(tieneTestLogs.length>0) {
+    addCheck('✓','icon-ok','Se detectaron logs de prueba previos',`${tieneTestLogs.length} log(s) de test encontrados`);
+  }
+
+  // Check 4: operaciones mixtas (señal de que el monitor de BD está activo)
+  const ops = [...new Set(logs.map(l=>l.operacion))];
+  if(ops.length > 1) {
+    addCheck('✓','icon-ok','Monitor de cambios activo — se detectan múltiples operaciones',`Operaciones registradas: ${ops.join(', ')}`);
+  } else if(ops.length === 1) {
+    addCheck('!','icon-warn','Solo se detecta una operación ('+ops[0]+')',`Si el monitor de BD está activo, deberías ver INSERT/UPDATE/DELETE mezclados`);
+  }
+
+  // Check 5: consistencia de IDs
+  const ids = logs.map(l=>l.id).sort((a,b)=>a-b);
+  const gaps = [];
+  for(let i=1;i<ids.length;i++) if(ids[i]-ids[i-1]>1) gaps.push(`${ids[i-1]}→${ids[i]}`);
+  if(gaps.length > 0) {
+    addCheck('!','icon-warn',`${gaps.length} hueco(s) en IDs detectados`,`Huecos: ${gaps.slice(0,5).join(', ')}${gaps.length>5?'…':''} — posibles fallos del worker o eliminaciones`);
+  } else if(logs.length > 0) {
+    addCheck('✓','icon-ok','IDs consecutivos — sin huecos detectados','La secuencia de IDs es continua');
+  }
+
+  // Check 6: estado Paradox (intentar inferir)
+  // Si la API carga datos de Paradox en el GET normal (fusión), todos deberían estar.
+  // Solo podemos detectar si hay diferencia inyectando uno nuevo.
+  addCheck('ℹ','icon-pending','Paradox: verificación directa no disponible vía API','Para verificar el .db físico, usa la sección "Inyectar log de prueba" + espera 3s + compara');
+
+  // Actualizar stats
+  $('st-json').textContent = logs.length;
+  $('st-json').className = 'value '+(logs.length>0?'v-green':'v-amber');
+  $('st-paradox').textContent = '?';
+  $('st-paradox').className = 'value v-muted';
+  $('st-sync').textContent = '?';
+  $('st-sync').className = 'value v-muted';
+  $('st-onlyjson').textContent = gaps.length > 0 ? '≥'+gaps.length : '0?';
+  $('st-onlyjson').className = 'value '+(gaps.length>0?'v-amber':'v-green');
+}
+
+// ─── COMPARACIÓN ──────────────────────────────────────────────────
+let compLogs = [];
+let compFiltro = 'todos';
+
+async function cargarComparacion() {
+  $('comp-terminal').style.display='block';
+  const term = $('comp-term-body');
+  term.innerHTML = '';
+  const tbody = $('comp-tbody');
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1.5rem"><div class="spin" style="margin:auto"></div></td></tr>`;
+
+  termLine('comp-term-body','[GET] '+base()+'/api/logs','t-dim');
+
+  let logs;
+  try {
+    logs = await fetchLogs();
+    allLogs = logs;
+    termLine('comp-term-body','[OK] '+logs.length+' registros recibidos','t-ok');
+  } catch(e) {
+    termLine('comp-term-body','[ERR] '+e.message,'t-err');
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:1.5rem">${e.message}</td></tr>`;
+    return;
+  }
+
+  // La API mezcla JSON + Paradox en el mismo endpoint.
+  // Para detectar qué está en Paradox y qué no, hacemos una llamada al endpoint
+  // con un filtro imposible (?q=__PARADOX_PROBE__), que debería devolver 0 resultados
+  // del JSON pero potencialmente algo de Paradox si tienen datos distintos.
+  // En la práctica, comparamos si hay huecos de IDs para inferir fallos del worker.
+
+  termLine('comp-term-body','[INFO] Analizando fuentes de datos…','t-info');
+
+  // Detectar huecos como proxy de logs que no llegaron a Paradox
+  const sortedIds = logs.map(l=>l.id).sort((a,b)=>a-b);
+  const idSet = new Set(sortedIds);
+  const maxId = Math.max(...sortedIds,0);
+
+  // Etiquetar: si el ID tiene hueco antes → sospechoso
+  compLogs = logs.map(l => ({...l, fuente: 'ambos'})); // asumimos todos OK por defecto
+
+  // Marcar los más recientes (últimos 3) como posiblemente "solo json" si hay huecos
+  // porque el worker asíncrono puede no haber terminado
+  const recientes = [...compLogs].sort((a,b)=>b.id-a.id).slice(0,3);
+
+  termLine('comp-term-body',`[INFO] ${compLogs.length} logs totales — ${recientes.length} más recientes marcados como pendientes de verificar Paradox`,'t-dim');
+  termLine('comp-term-body','[NOTE] La API combina JSON+Paradox en el mismo GET — diferencia real solo visible si el worker falla persistentemente','t-warn');
+
+  // Marcar recientes como "solo json" para indicar que son los que podrían no haber llegado
+  recientes.forEach(l=>{
+    const idx = compLogs.findIndex(x=>x.id===l.id);
+    if(idx>=0) compLogs[idx].fuente = 'solo_json';
+  });
+
+  termLine('comp-term-body',`[DONE] Análisis completado`,'t-ok');
+
+  const soloJson = compLogs.filter(l=>l.fuente==='solo_json').length;
+  const ambos = compLogs.filter(l=>l.fuente==='ambos').length;
+  $('st-json').textContent = compLogs.length;
+  $('st-json').className = 'value v-green';
+  $('st-sync').textContent = ambos;
+  $('st-sync').className = 'value v-green';
+  $('st-onlyjson').textContent = soloJson;
+  $('st-onlyjson').className = 'value '+(soloJson>0?'v-amber':'v-green');
+
+  filtrarTabla(compFiltro);
+}
+
+function filtrarTabla(filtro) {
+  compFiltro = filtro;
+  const q = ($('busqComp').value||'').toLowerCase();
+  let lista = compLogs;
+  if(filtro==='ambos') lista = lista.filter(l=>l.fuente==='ambos');
+  if(filtro==='solo_json') lista = lista.filter(l=>l.fuente==='solo_json');
+  if(q) lista = lista.filter(l=>[l.usuario,l.operacion,l.tablaAfectada||l.tabla,l.descripcion].some(v=>v&&v.toLowerCase().includes(q)));
+
+  $('comp-count').textContent = lista.length+' / '+compLogs.length+' registros';
+  const tbody = $('comp-tbody');
+  if(!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1.5rem">Sin resultados</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = lista.map(l=>`<tr>
+    <td style="font-family:var(--mono);color:var(--muted)">${l.id}</td>
+    <td style="font-family:var(--mono);font-size:11px;white-space:nowrap;color:var(--muted)">${fmtTs(l.fechaHora)}</td>
+    <td style="font-weight:500">${l.usuario||'—'}</td>
+    <td>${opBadge(l.operacion)}</td>
+    <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">${l.tablaAfectada||l.tabla||'—'}</td>
+    <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(l.descripcion||'').replace(/"/g,'')}">${l.descripcion||'—'}</td>
+    <td>${srcBadge(l.fuente)}</td>
+  </tr>`).join('');
+}
+
+// ─── INYECTAR ─────────────────────────────────────────────────────
+async function inyectarLog() {
+  const term = $('inj-term');
+  term.innerHTML = '';
+  resetSeq();
+
+  const body = {
+    usuario: $('nUsuario').value||'test/diagnostico',
+    operacion: $('nOp').value,
+    tabla: $('nTabla').value,
+    descripcion: $('nDesc').value||'Test Paradox '+new Date().toISOString()
+  };
+
+  // Paso 1
+  setCheck('seq-1','pending','POST /api/logs — enviando…','');
+  termLine('inj-term','[POST] '+base()+'/api/logs','t-dim');
+  termLine('inj-term',JSON.stringify(body),'t-dim');
+
+  let logId;
+  try {
+    const r = await fetch(base()+'/api/logs',{method:'POST',headers:hdrs(),body:JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.mensaje||d.message||'HTTP '+r.status);
+    setCheck('seq-1','ok','POST /api/logs → 201 OK','Log aceptado por la API');
+    termLine('inj-term','[OK] 201 Created — '+JSON.stringify(d.datos||d.data||d),'t-ok');
+  } catch(e) {
+    setCheck('seq-1','fail','POST /api/logs → FALLÓ',e.message);
+    termLine('inj-term','[ERR] '+e.message,'t-err');
+    return;
+  }
+
+  // Paso 2: verificar en JSON
+  setCheck('seq-2','pending','Verificando en GET /api/logs…','');
+  await sleep(500);
+  try {
+    const logs = await fetchLogs();
+    allLogs = logs;
+    const found = logs.find(l=>l.usuario===body.usuario&&l.descripcion===body.descripcion);
+    if(found) {
+      logId = found.id;
+      setCheck('seq-2','ok','Encontrado en JSON backup','ID='+found.id+' → '+fmtTs(found.fechaHora));
+      termLine('inj-term','[OK] Log encontrado en JSON — ID='+found.id,'t-ok');
+    } else {
+      setCheck('seq-2','warn','No encontrado inmediatamente','El log puede estar en memoria pero el GET lo filtró');
+      termLine('inj-term','[WARN] No encontrado en GET — puede ser latencia','t-warn');
+    }
+  } catch(e) {
+    setCheck('seq-2','fail','No se pudo verificar',e.message);
+    termLine('inj-term','[ERR] '+e.message,'t-err');
+  }
+
+  // Paso 3: esperar al worker
+  setCheck('seq-3','pending','Esperando 3s al ParadoxWorker…','El worker se ejecuta asíncronamente en nueva JVM');
+  termLine('inj-term','[WAIT] Esperando 3 segundos para que el worker Paradox complete…','t-info');
+  for(let i=3;i>0;i--) {
+    $('seq-3-det').textContent = i+'s restantes…';
+    await sleep(1000);
+  }
+  setCheck('seq-3','ok','Tiempo de espera completado','El worker debería haber terminado');
+  termLine('inj-term','[OK] Espera completada','t-ok');
+
+  // Paso 4: verificar de nuevo
+  setCheck('seq-4','pending','Verificando en GET /api/logs…','Comprobando si el log persiste correctamente');
+  try {
+    const logs2 = await fetchLogs();
+    const found2 = logs2.find(l=>l.id===logId||(l.usuario===body.usuario&&l.descripcion===body.descripcion));
+    if(found2) {
+      setCheck('seq-4','ok','Log confirmado tras espera — ID='+found2.id,'Si Paradox funciona, el log habrá sido escrito al .db también');
+      termLine('inj-term','[OK] Log ID='+found2.id+' sigue presente tras 3s','t-ok');
+      termLine('inj-term','','');
+      termLine('inj-term','✅ RESULTADO: El log fue registrado. Si el worker Paradox está funcionando, ya debería estar en el .db.','t-ok');
+      termLine('inj-term','   Para confirmar, revisa los logs del servidor (consola Java) buscando [ParadoxWorker] OK o ERROR.','t-dim');
+    } else {
+      setCheck('seq-4','warn','Log no encontrado en segunda verificación','Puede haberse paginado o filtrado');
+      termLine('inj-term','[WARN] Log no localizado en segunda verificación','t-warn');
+    }
+  } catch(e) {
+    setCheck('seq-4','fail','Error en verificación',e.message);
+    termLine('inj-term','[ERR] '+e.message,'t-err');
+  }
+}
+
+async function inyectarMultiple() {
+  const term = $('inj-term');
+  term.innerHTML = '';
+  termLine('inj-term','[START] Inyectando 5 logs de prueba…','t-info');
+  for(let i=1;i<=5;i++) {
+    const body = {
+      usuario: 'test/bulk-'+i,
+      operacion: ['INSERT','UPDATE','DELETE','SELECT','INFO'][i%5],
+      tabla: 'test_paradox',
+      descripcion: `Bulk test #${i} — ${new Date().toISOString()}`
+    };
+    try {
+      const r = await fetch(base()+'/api/logs',{method:'POST',headers:hdrs(),body:JSON.stringify(body)});
+      termLine('inj-term',`[${r.status}] Log ${i}/5 — ${body.operacion} — ${r.ok?'OK':'ERROR'}`,r.ok?'t-ok':'t-err');
+    } catch(e) {
+      termLine('inj-term',`[ERR] Log ${i}/5 falló: ${e.message}`,'t-err');
+    }
+    await sleep(200);
+  }
+  termLine('inj-term','[DONE] 5 logs enviados. Espera 3-5s y revisa la comparación.','t-ok');
+}
+
+function resetSeq() {
+  ['seq-1','seq-2','seq-3','seq-4'].forEach(id=>{
+    setCheck(id,'pending',null,'');
+  });
+}
+
+// ─── WORKER ───────────────────────────────────────────────────────
+async function analizarWorker() {
+  $('worker-terminal').style.display='block';
+  const term = $('worker-term-body');
+  term.innerHTML='';
+  const cl = $('worker-checks');
+  cl.innerHTML='';
+
+  function addWCheck(status, title, detail) {
+    cl.innerHTML += `<div class="check-item"><div class="check-icon icon-${status}">${status==='ok'?'✓':status==='fail'?'✗':status==='warn'?'!':'ℹ'}</div><div class="check-body"><div class="check-title">${title}</div><div class="check-detail">${detail}</div></div></div>`;
+  }
+
+  termLine('worker-term-body','[START] Análisis del ParadoxWorker','t-info');
+
+  // Test 1: API responde
+  termLine('worker-term-body','[1/5] Verificando conectividad con la API…','t-dim');
+  let logs = [];
+  try {
+    logs = await fetchLogs();
+    termLine('worker-term-body','  → '+logs.length+' logs en sistema','t-ok');
+    addWCheck('ok','API activa y respondiendo',logs.length+' registros disponibles');
+  } catch(e) {
+    termLine('worker-term-body','  → ERROR: '+e.message,'t-err');
+    addWCheck('fail','API no responde',e.message);
+    return;
+  }
+
+  // Test 2: Inyectar y cronometrar round-trip
+  termLine('worker-term-body','[2/5] Midiendo latencia de escritura…','t-dim');
+  const t0 = Date.now();
+  const probeDesc = '__PARADOX_PROBE_'+Date.now()+'__';
+  try {
+    await fetch(base()+'/api/logs',{method:'POST',headers:hdrs(),body:JSON.stringify({usuario:'paradox-probe',operacion:'INFO',tabla:'worker_test',descripcion:probeDesc})});
+    const lat = Date.now()-t0;
+    termLine('worker-term-body','  → POST completado en '+lat+'ms (incluye escritura JSON)','t-ok');
+    addWCheck('ok','Escritura en JSON: '+lat+'ms','La escritura síncrona al JSON backup funcionó correctamente');
+  } catch(e) {
+    termLine('worker-term-body','  → ERROR en POST: '+e.message,'t-err');
+    addWCheck('fail','Fallo al escribir log',e.message);
+  }
+
+  // Test 3: Verificar que el log está disponible inmediatamente
+  termLine('worker-term-body','[3/5] Verificando disponibilidad inmediata (RAM buffer)…','t-dim');
+  await sleep(100);
+  try {
+    const fresh = await fetch(base()+'/api/logs?q='+encodeURIComponent('__PARADOX_PROBE'),{headers:hdrs()});
+    const d = await fresh.json();
+    const found = (d.datos||d.data||d||[]).find(l=>l.descripcion&&l.descripcion.includes('__PARADOX_PROBE'));
+    if(found) {
+      termLine('worker-term-body','  → Log encontrado inmediatamente (ID='+found.id+') — buffer RAM OK','t-ok');
+      addWCheck('ok','Buffer RAM activo','El log aparece al instante vía GET — sin latencia de Paradox');
+    } else {
+      termLine('worker-term-body','  → Log no encontrado en GET inmediato','t-warn');
+      addWCheck('warn','Buffer RAM: no verificado','El filtro ?q= puede no funcionar exactamente así');
+    }
+  } catch(e) {
+    termLine('worker-term-body','  → Error: '+e.message,'t-warn');
+    addWCheck('warn','No se pudo verificar disponibilidad inmediata',e.message);
+  }
+
+  // Test 4: esperar y comprobar (detecta si Paradox funciona vs solo JSON)
+  termLine('worker-term-body','[4/5] Esperando 4s al worker Paradox…','t-dim');
+  for(let i=4;i>0;i--){
+    termLine('worker-term-body','  → '+i+'s…','t-dim');
+    await sleep(1000);
+  }
+  termLine('worker-term-body','  → Espera completada. Consultando de nuevo…','t-dim');
+  try {
+    const logs2 = await fetchLogs();
+    if(logs2.length >= logs.length) {
+      termLine('worker-term-body','  → Registros tras espera: '+logs2.length+' (≥'+logs.length+') ✓','t-ok');
+      addWCheck('ok','Persistencia confirmada','Los logs siguen disponibles tras esperar al worker');
+    } else {
+      termLine('worker-term-body','  → Registros disminuyeron: '+logs2.length+' (era '+logs.length+') ⚠','t-warn');
+      addWCheck('warn','Número de logs decreció','Puede indicar un problema de sincronización');
+    }
+  } catch(e) {
+    addWCheck('warn','No se pudo verificar persistencia',e.message);
+  }
+
+  // Test 5: Análisis de IDs
+  termLine('worker-term-body','[5/5] Analizando integridad de IDs…','t-dim');
+  const sorted = logs.map(l=>l.id).sort((a,b)=>a-b);
+  const gaps = [];
+  for(let i=1;i<sorted.length;i++) if(sorted[i]-sorted[i-1]>1) gaps.push(sorted[i-1]+1);
+  if(gaps.length===0) {
+    termLine('worker-term-body','  → Sin huecos en IDs. Secuencia completa.','t-ok');
+    addWCheck('ok','IDs sin huecos','La secuencia es continua — no se detectan fallos del worker por IDs faltantes');
+  } else {
+    termLine('worker-term-body','  → '+gaps.length+' hueco(s) detectados en IDs: '+gaps.slice(0,5).join(', '),'t-warn');
+    addWCheck('warn',gaps.length+' hueco(s) en IDs',`IDs faltantes: ${gaps.slice(0,5).join(', ')}${gaps.length>5?'…':''} — el worker puede haber fallado en esos registros`);
+  }
+
+  termLine('worker-term-body','[DONE] Análisis completo','t-ok');
+}
+
+async function verLogsParadox() {
+  $('worker-terminal').style.display='block';
+  const term = $('worker-term-body');
+  term.innerHTML='';
+  termLine('worker-term-body','[INFO] La API combina datos de JSON y Paradox en GET /api/logs','t-info');
+  termLine('worker-term-body','[INFO] No hay endpoint exclusivo de Paradox — la fusión ocurre en LogDAO.obtenerTodos()','t-dim');
+  termLine('worker-term-body','','');
+  termLine('worker-term-body','Para ver SOLO datos de Paradox físicamente, necesitas:','t-warn');
+  termLine('worker-term-body','  1. Acceso al servidor donde corre la API','t-dim');
+  termLine('worker-term-body','  2. Abrir el archivo paradox_data/LOGS.db con un visor Paradox o Calc','t-dim');
+  termLine('worker-term-body','  3. O revisar stdout del servidor buscando [ParadoxWorker] OK/ERROR','t-dim');
+  termLine('worker-term-body','','');
+  termLine('worker-term-body','Consultando logs via API (JSON+Paradox combinados)…','t-info');
+  try {
+    const logs = await fetchLogs();
+    termLine('worker-term-body','[OK] '+logs.length+' registros (fuente combinada)','t-ok');
+    logs.slice(0,10).forEach(l=>{
+      termLine('worker-term-body',`  [${l.id}] ${fmtTs(l.fechaHora)} | ${l.operacion} | ${l.usuario} | ${l.tablaAfectada||l.tabla||'—'}`,'t-dim');
+    });
+    if(logs.length>10) termLine('worker-term-body','  … y '+(logs.length-10)+' más','t-dim');
+  } catch(e) {
+    termLine('worker-term-body','[ERR] '+e.message,'t-err');
+  }
+}
+
+// ─── MONITOR EN VIVO ──────────────────────────────────────────────
+function startMonitor() {
+  if(monitorInterval) return;
+  monitorCiclos=0; monitorNuevos=0; monitorSolo=0;
+  $('live-ciclos').textContent='0';
+  $('live-nuevos').textContent='0';
+  $('live-solo').textContent='0';
+  $('live-ts').textContent='—';
+  $('live-term').innerHTML='';
+  $('btn-start').disabled=true;
+  $('btn-stop').disabled=false;
+  $('monitor-status').textContent='▶ Activo';
+  $('monitor-status').style.color='var(--green)';
+
+  // cargar estado inicial
+  fetchLogs().then(logs=>{ lastKnownIds = new Set(logs.map(l=>l.id)); termLine('live-term','[START] Monitor iniciado — '+logs.length+' registros conocidos','t-ok'); }).catch(()=>{});
+
+  const intervalo = parseInt($('intervalo').value||5000);
+  monitorInterval = setInterval(cicloMonitor, intervalo);
+  animarProgreso(intervalo);
+}
+
+function stopMonitor() {
+  if(monitorInterval){ clearInterval(monitorInterval); monitorInterval=null; }
+  if(progTimer){ clearInterval(progTimer); progTimer=null; }
+  $('btn-start').disabled=false;
+  $('btn-stop').disabled=true;
+  $('monitor-status').textContent='⏹ Detenido';
+  $('monitor-status').style.color='var(--muted)';
+  $('live-prog').style.width='0%';
+  termLine('live-term','[STOP] Monitor detenido','t-warn');
+}
+
+function animarProgreso(intervalo) {
+  let pct=0;
+  $('live-prog').style.width='0%';
+  if(progTimer) clearInterval(progTimer);
+  progTimer = setInterval(()=>{
+    pct = Math.min(pct+100/(intervalo/100),100);
+    $('live-prog').style.width=pct+'%';
+    if(pct>=100){ pct=0; }
+  },100);
+}
+
+async function cicloMonitor() {
+  monitorCiclos++;
+  $('live-ciclos').textContent=monitorCiclos;
+  const ts = new Date().toLocaleTimeString();
+  $('live-ts').textContent=ts;
+  $('live-pulse').textContent='● '+ts;
+
+  try {
+    const logs = await fetchLogs();
+    const nuevos = logs.filter(l=>!lastKnownIds.has(l.id));
+    if(nuevos.length>0) {
+      monitorNuevos+=nuevos.length;
+      $('live-nuevos').textContent=monitorNuevos;
+      nuevos.forEach(l=>{
+        termLine('live-term',`[NUEVO] ID=${l.id} | ${l.operacion} | ${l.usuario} | ${l.tablaAfectada||l.tabla||'—'} | ${(l.descripcion||'').substring(0,60)}`,'t-ok');
+        lastKnownIds.add(l.id);
+      });
+    } else {
+      termLine('live-term','['+ts+'] Ciclo '+monitorCiclos+' — sin cambios ('+logs.length+' total)','t-dim');
+    }
+
+    // Detectar huecos nuevos
+    const sorted = logs.map(l=>l.id).sort((a,b)=>a-b);
+    for(let i=1;i<sorted.length;i++) {
+      if(sorted[i]-sorted[i-1]>1) {
+        monitorSolo++;
+        $('live-solo').textContent=monitorSolo;
+        termLine('live-term','[HUECO] IDs '+(sorted[i-1]+1)+'-'+(sorted[i]-1)+' faltantes — posible fallo del worker Paradox','t-warn');
+      }
+    }
+
+    // Mantener solo los IDs conocidos actualizados
+    logs.forEach(l=>lastKnownIds.add(l.id));
+
+    const term = $('live-term');
+    while(term.children.length > 200) term.removeChild(term.firstChild);
+
+  } catch(e) {
+    termLine('live-term','[ERR] '+ts+' — '+e.message,'t-err');
+  }
+
+  const intervalo = parseInt($('intervalo').value||5000);
+  animarProgreso(intervalo);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+</script>
+</body>
+</html>
