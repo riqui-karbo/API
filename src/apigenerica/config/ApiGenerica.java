@@ -221,6 +221,7 @@ public class ApiGenerica {
         app.get("/api/erp/modulos",         ctx -> moduloCtrl.getAll(ctx));
         app.post("/api/erp/modulos",        ctx -> moduloCtrl.create(ctx));
         app.delete("/api/erp/modulos/{id}", ctx -> moduloCtrl.delete(ctx));
+        app.get("/api/erp/tablas",          ctx -> moduloCtrl.getTablasByModulo(ctx));
 
         // ── Endpoints de administracion de BD ────────────────────────
         app.get("/api/admin/bd",                                    ctx -> adminBdCtrl.listarBDs(ctx));
