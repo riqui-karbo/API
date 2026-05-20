@@ -223,4 +223,20 @@ public class MetaService {
                 throw new BaseDatosException("Error en la base de datos al modificar la tabla: " + e.getMessage(), e);
         }
     }
+
+    public void crearRelacion(apigenerica.model.RelacionConfig rel) throws SQLException {
+        metaDao.guardarRelacion(rel);
+    }
+
+    public List<apigenerica.model.RelacionConfig> listarRelaciones(long tablaId) throws SQLException {
+        return metaDao.listarRelacionesPorTabla(tablaId);
+    }
+
+    public void eliminarRelacion(int idRelacion) throws SQLException {
+        apigenerica.model.RelacionConfig rel = metaDao.getRelacionPorId(idRelacion);
+        if (rel == null) {
+            throw new apigenerica.excepciones.RecursoNoEncontradoException("Relación con id " + idRelacion + " no encontrada.");
+        }
+        metaDao.eliminarRelacion(idRelacion);
+    }
 }

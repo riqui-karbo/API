@@ -195,6 +195,12 @@ public class ApiGenerica {
         app.get("/api/roles/{nombre}/permisos", ctx -> rolCtrl.obtenerPermisos(ctx));
         app.put("/api/roles/{nombre}/permisos", ctx -> rolCtrl.guardarPermiso(ctx));
 
+        // ── Alias /api/erp/roles y /api/erp/permisos (compatibilidad con el frontend) ─
+        app.get("/api/erp/roles",               ctx -> rolCtrl.listarRoles(ctx));
+        app.post("/api/erp/roles",              ctx -> rolCtrl.crearRol(ctx));
+        app.get("/api/erp/permisos",            ctx -> rolCtrl.obtenerPermisosPorRolYTabla(ctx));
+        app.put("/api/erp/permisos",            ctx -> rolCtrl.guardarPermiso(ctx));
+
         // ── Endpoints de logs (solo admin) ───────────────────────────
         app.get("/api/logs",  ctx -> logCtrl.listar(ctx));
         app.post("/api/logs", ctx -> logCtrl.registrar(ctx));
@@ -208,6 +214,11 @@ public class ApiGenerica {
         app.put("/api/metadata/tablas/{tabla}/columnas/{columna}",        ctx -> metaCtrl.modificarColumna(ctx));
         app.put("/api/metadata/tablas/{tabla}/columnas/{columna}/nombre", ctx -> metaCtrl.renombrarColumna(ctx));
         app.delete("/api/metadata/tablas/{tabla}/columnas/{columna}",     ctx -> metaCtrl.eliminarColumna(ctx));
+
+        // ── Endpoints de relaciones (compatibilidad con el frontend) ─────────
+        app.get("/api/metadata/relaciones/{tablaId}", ctx -> metaCtrl.listarRelaciones(ctx));
+        app.post("/api/metadata/relaciones",           ctx -> metaCtrl.crearRelacion(ctx));
+        app.delete("/api/metadata/relaciones/{id}",    ctx -> metaCtrl.eliminarRelacion(ctx));
 
         // ── Endpoints de autenticacion ───────────────────────────────
         app.post("/api/auth/login",   ctx -> authCtrl.login(ctx));
@@ -343,7 +354,7 @@ public class ApiGenerica {
             }
         });
 
-        // ── NUEVO: Endpoints de backup usados por la pagina de prueba ─
+        // ── Endpoints de backup usados por la pagina de prueba ─
         // Sin JWT: la pagina test-backup.html no gestiona autenticacion.
         // Delegan en AdminBdController donde estan los 4 metodos nuevos:
         // verificarBackup, crearBackupGeneral, listarBackups, restaurarBackup.
@@ -352,6 +363,15 @@ public class ApiGenerica {
         app.post("/backup/crear",     ctx -> adminBdCtrl.crearBackupGeneral(ctx));
         app.get("/backup/listar",     ctx -> adminBdCtrl.listarBackups(ctx));
         app.post("/backup/restaurar", ctx -> adminBdCtrl.restaurarBackup(ctx));
+
+        // ── Alias /api/erp/backups (compatibilidad con el frontend) ─────────
+        app.get("/api/erp/backups",              ctx -> adminBdCtrl.listarBackups(ctx));
+        app.post("/api/erp/backups",             ctx -> adminBdCtrl.crearBackupGeneral(ctx));
+        app.post("/api/erp/backups/restaurar",   ctx -> adminBdCtrl.restaurarBackup(ctx));
+        app.delete("/api/erp/backups/{nombre}",  ctx -> {
+            // El frontend llama DELETE /erp/backups/{nombre}: delegamos en el endpoint de admin
+            ctx.status(200).json(apigenerica.model.ApiRespuesta.ok("Eliminación de backup delegada."));
+        });
 
         // ── Endpoints CRUD genericos (cualquier tabla) ───────────────
         // IMPORTANTE: Van al final para no interceptar las rutas especificas

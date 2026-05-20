@@ -405,4 +405,73 @@ public class MetaDao {
                 .filter(ColumnaConfig::isArchivo)
                 .collect(Collectors.toList());
     }
+
+    public void guardarRelacion(apigenerica.model.RelacionConfig rel) throws java.sql.SQLException {
+        TablaConfig tablaOrigen = getConfiguracion(rel.getTablaOrigen());
+        if (tablaOrigen == null) {
+            throw new java.sql.SQLException("No se encontró la tabla de origen en los metadatos: " + rel.getTablaOrigen());
+        }
+        String sql = "INSERT INTO erp_meta_relaciones (nombre, tabla_origen, fk_columna, tabla_destino, cardinalidad) VALUES (?, ?, ?, ?, ?)";
+        try (java.sql.Connection conn = ConexionMysql.getConexion(AppConfig.DB_SISTEMA);
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            String nombreRel = "fk_" + rel.getTablaOrigen() + "_" + rel.getTablaDestino();
+            pstmt.setString(1, nombreRel);
+            pstmt.setLong(2, tablaOrigen.getId());
+            pstmt.setString(3, rel.getFkColumna());
+            pstmt.setString(4, rel.getTablaDestino());
+            pstmt.setString(5, rel.getCardinalidad());
+            pstmt.executeUpdate();
+        } catch (java.sql.SQLException e) {
+            throw new java.sql.SQLException("Error al persistir la relación en los metadatos: " + e.getMessage());
+        }
+    }
+
+    public List<apigenerica.model.RelacionConfig> listarRelacionesPorTabla(long tablaId) throws java.sql.SQLException {
+        List<apigenerica.model.RelacionConfig> relaciones = new java.util.ArrayList<>();
+        String sql = "SELECT nombre, fk_columna, tabla_destino, cardinalidad FROM erp_meta_relaciones WHERE tabla_origen = ?";
+        try (java.sql.Connection conn = ConexionMysql.getConexion(AppConfig.DB_SISTEMA);
+             java.sql.PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setLong(1, tablaId);
+            try (java.sql.ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    apigenerica.model.RelacionConfig rel = new apigenerica.model.RelacionConfig();
+                    rel.setNombreRelacion(rs.getString("nombre"));
+                    rel.setFkColumna(rs.getString("fk_columna"));
+                    rel.setTablaDestino(rs.getString("tabla_destino"));
+                    rel.setCardinalidad(rs.getString("cardinalidad"));
+                    relaciones.add(rel);
+                }
+            }
+        }
+        return relaciones;
+    }
+
+    public apigenerica.model.RelacionConfig getRelacionPorId(int id) throws java.sql.SQLException {
+        String sql = "SELECT r.*, t.nombre_logico as tabla_nombre " +
+                     "FROM erp_meta_relaciones r " +
+                     "JOIN erp_meta_tablas t ON r.tabla_origen = t.id " +
+                     "WHERE r.id = ?";
+        try (java.sql.Connection conn = ConexionMysql.getConexion(AppConfig.DB_SISTEMA);
+             java.sql.PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            java.sql.ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                apigenerica.model.RelacionConfig rel = new apigenerica.model.RelacionConfig();
+                rel.setNombreRelacion(rs.getString("nombre"));
+                rel.setTablaOrigen(rs.getString("tabla_nombre"));
+                rel.setFkColumna(rs.getString("fk_columna"));
+                return rel;
+            }
+        }
+        return null;
+    }
+
+    public void eliminarRelacion(int id) throws java.sql.SQLException {
+        String sql = "DELETE FROM erp_meta_relaciones WHERE id = ?";
+        try (java.sql.Connection conn = ConexionMysql.getConexion(AppConfig.DB_SISTEMA);
+             java.sql.PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            stmt.executeUpdate();
+        }
+    }
 }
