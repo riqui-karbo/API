@@ -29,26 +29,16 @@ public class MetaService {
         this.ficheroService = ficheroService;
     }
 
-    /**
-     * Guardar metadatos
-     *
-     * @param tabla Metadatos a guardar
-     */
+    // Guarda metadatos de una tabla, generando nombre amigable y marcando contraseñas
     public void guardarConfiguracion(TablaConfig tabla) {
         if (tabla.getNombreAmigable() == null || tabla.getNombreAmigable().trim().isEmpty()) {
             tabla.setNombreAmigable(crearNombreAmigable(tabla.getNombreLogico()));
         }
-        // Marcar columnas de contraseña y archivo automáticamente
         if (tabla.getColumnas() != null) {
             for (ColumnaConfig col : tabla.getColumnas()) {
                 if ("CONTRASENA".equalsIgnoreCase(col.getTipo())) {
                     col.setContrasena(true);
                     col.setVisible(false);
-                    col.setSensible(true);
-                }
-
-                if ("ARCHIVO".equalsIgnoreCase(col.getTipo())) {
-                    col.setArchivo(true);
                 }
             }
         }
@@ -59,38 +49,18 @@ public class MetaService {
         }
     }
 
-    /**
-     * Borra los metadatos de la tabla
-     *
-     * @param nombreLogico Nombre de la tabla
-     */
     public void eliminarConfiguracion(String nombreLogico) {
         metaDao.eliminarConfiguracion(nombreLogico);
     }
 
-    /**
-     * Construye el nombre amigable a partir del nombre lógico. Ejemplo:
-     * datos_clientes genera el nombre Datos clientes
-     *
-     * @param nombreLogico Nombre lógico de la tabla
-     * @return Nombre amigable
-     */
+    // Convierte nombre_logico a Nombre amigable (ej: datos_clientes → Datos clientes)
     public String crearNombreAmigable(String nombreLogico) {
         validador.validarNombre(nombreLogico);
         String nombreAmigable = nombreLogico.replace("_", " ");
         return nombreAmigable.substring(0, 1).toUpperCase() + nombreAmigable.substring(1);
     }
 
-    /**
-     * Obtiene las relaciones entre una tabla principal y una o más tablas
-     * secundarias. Busca la configuración de la tabla principal (metadatos) y
-     * con ella su lista de relaciones. Procesa una lista de includes, separando
-     * cada elemento en un array,
-     *
-     * @param tablaPrincipal Tabla padre
-     * @param includes Cadena de texto con las tablas secundarias
-     * @return Lista de relaciones
-     */
+    // Obtiene relaciones de una tabla principal con tablas secundarias (includes)
     public List<RelacionConfig> getRelaciones(String tablaPrincipal, String includes) {
         if (includes == null || includes.trim().isEmpty()) {
             return new ArrayList<>();
@@ -119,14 +89,7 @@ public class MetaService {
         return relacionesFinales;
     }
 
-    /**
-     * Obtiene todas las relaciones internas que existen entre una lista de
-     * tablas. Para operaciones transaccionales donde necesitamos inyectar
-     * FKs.
-     *
-     * @param tablas Lista de tablas de la transacción
-     * @return Lista de relaciones entre estas tablas
-     */
+    // Obtiene relaciones internas entre una lista de tablas (para transacciones batch)
     public List<RelacionConfig> getRelacionesEntreTablas(List<String> tablas) {
         List<RelacionConfig> relacionesFinales = new ArrayList<>();
         if (tablas == null || tablas.isEmpty()) {
@@ -145,12 +108,6 @@ public class MetaService {
         return relacionesFinales;
     }
 
-    /**
-     * Devuelve los metadatos de una tabla
-     *
-     * @param nombreLogico Nombre de la tabla en MySQL
-     * @return Metadatos de la tabla
-     */
     public TablaConfig getConfiguracion(String nombreLogico) {
         TablaConfig config = metaDao.getConfiguracion(nombreLogico);
         if (config == null) {
@@ -159,13 +116,6 @@ public class MetaService {
         return config;
     }
 
-    /**
-     * Devuelve la lista de todas las tablas registradas para una base de datos.
-     *
-     * @param moduloId Id del módulo cuyas tablas se quieren mostrar
-     * @param sinModulo true si la tabla no pertenece a un módulo
-     * @return Lista de metadatos de tablas
-     */
     public List<TablaConfig> listarTablas(Long moduloId, Boolean sinModulo) {
         if (Boolean.TRUE.equals(sinModulo)) {
             return metaDao.listarTablasSinModulo();
@@ -176,12 +126,7 @@ public class MetaService {
         return metaDao.getTodas();
     }
 
-    /**
-     * Elimina una tabla
-     *
-     * @param nombreLogico Nombre de la base de datos en MySQL
-     * @throws SQLException
-     */
+    // Elimina tabla: valida dependencias, ejecuta DROP, borra metadatos y ficheros asociados
     public void eliminarTabla(String nombreLogico) throws SQLException {
         List<RelacionConfig> relaciones = metaDao.getRelacionesHijas(nombreLogico);
         if (!relaciones.isEmpty()) {
@@ -196,49 +141,26 @@ public class MetaService {
         }
     }
 
-    /**
-     * Devuelve la configuración completa de una tabla (columnas y relaciones).
-     *
-     * @param nombreLogico Nombre de la tabla en MySQL
-     * @return Metadatos de la tabla
-     */
     public TablaConfig obtenerDetalleTabla(String nombreLogico) {
         return metaDao.getConfiguracion(nombreLogico);
     }
 
-    /**
-     * Agrega una columna a una tabla
-     *
-     * @param nombreTabla Nombre de la tabla en MySQL
-     * @param nuevaCol Metadatos de la nueva columna
-     * @throws SQLException
-     */
+    // Agrega columna: valida, genera ALTER TABLE ADD, actualiza metadatos
     public void agregarColumna(String nombreTabla, ColumnaConfig nuevaCol) throws SQLException {
         TablaConfig config = metaDao.getConfiguracion(nombreTabla);
         validador.validarColumnaNoExiste(config, nuevaCol.getNombre());
         validador.validarProteccionInterna(nuevaCol.getNombre());
         String sql = sqlService.generarAddColumnSql(nombreTabla, nuevaCol);
         sqlService.ejecutarSql(AppConfig.DB_CLIENTE, sql);
-        // Gestionar metadatos
         if ("CONTRASENA".equalsIgnoreCase(nuevaCol.getTipo())) {
             nuevaCol.setContrasena(true);
             nuevaCol.setVisible(false);
-            nuevaCol.setSensible(true);
-        }
-        if ("ARCHIVO".equalsIgnoreCase(nuevaCol.getTipo())) {
-            nuevaCol.setArchivo(true);
         }
         config.getColumnas().add(nuevaCol);
         metaDao.guardarConfiguracion(config);
     }
 
-    /**
-     * Elimina la columna de una tabla
-     *
-     * @param nombreTabla Nombre de la tabla en MySQL
-     * @param nombreColumna Nombre de la columna a eliminar
-     * @throws SQLException
-     */
+    // Elimina columna: valida, ejecuta DROP COLUMN, actualiza metadatos
     public void eliminarColumna(String nombreTabla, String nombreColumna) throws SQLException {
         TablaConfig config = metaDao.getConfiguracion(nombreTabla);
         validador.validarProteccionInterna(nombreColumna);
@@ -249,15 +171,7 @@ public class MetaService {
         metaDao.guardarConfiguracion(config);
     }
 
-    /**
-     * Renombra una columna
-     *
-     * @param nombreTabla Nombre de la tabla en MySQL
-     * @param nombreViejo Nombre actual de la columna
-     * @param nombreNuevo Nombre por el que se reemplazará el nombre de la
-     * columna
-     * @throws SQLException
-     */
+    // Renombra columna: valida, ejecuta RENAME COLUMN, actualiza metadatos
     public void renombrarColumna(String nombreTabla, String nombreViejo, String nombreNuevo) throws SQLException {
         TablaConfig config = metaDao.getConfiguracion(nombreTabla);
         validador.validarProteccionInterna(nombreViejo);
@@ -271,12 +185,7 @@ public class MetaService {
         metaDao.guardarConfiguracion(config);
     }
 
-    /**
-     * Modifica una columna de una tabla
-     *
-     * @param nombreTabla Nombre de la tabla
-     * @param colModificada Nombre de la columna
-     */
+    // Modifica columna: valida, ejecuta MODIFY COLUMN, actualiza metadatos con manejo de errores MySQL
     public void modificarColumna(String nombreTabla, ColumnaConfig colModificada) {
         TablaConfig config = metaDao.getConfiguracion(nombreTabla);
         validador.validarColumnaExiste(config, colModificada.getNombre());

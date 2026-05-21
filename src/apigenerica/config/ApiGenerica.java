@@ -1,13 +1,46 @@
 package apigenerica.config;
 
-import apigenerica.controller.*;
-import apigenerica.dao.*;
-import apigenerica.excepciones.*;
+import apigenerica.controller.AdminBdController;
+import apigenerica.controller.AuthController;
+import apigenerica.controller.BaseController;
+import apigenerica.controller.ConfigController;
+import apigenerica.controller.EmpleadoController;   // <- AÑADIDO
+import apigenerica.controller.MetaController;
+import apigenerica.controller.ModuloController;
+import apigenerica.controller.RolController;
+import apigenerica.dao.BaseDao;
+import apigenerica.dao.MetaDao;
+import apigenerica.dao.RolDao;
+import apigenerica.excepciones.BaseDatosException;
+import apigenerica.excepciones.NoAutorizadoException;
+import apigenerica.excepciones.RecursoNoEncontradoException;
+import apigenerica.excepciones.ValidacionException;
 import apigenerica.model.ApiRespuesta;
-import apigenerica.service.*;
+import apigenerica.dao.UsuarioDao;
+import apigenerica.service.EmpleadoService;          // <- AÑADIDO
+import apigenerica.service.FicheroService;
+import apigenerica.service.JwtService;
+import apigenerica.service.MetaService;
+import apigenerica.service.OrderService;
+import apigenerica.service.ServicioCifrado;
+import apigenerica.service.SqlService;
+import apigenerica.service.ValidadorService;
+import apigenerica.controller.LogController;
 import logs.service.LogService;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import io.javalin.Javalin;
+
+// NUEVO: imports necesarios para los endpoints de ficheros y la pagina de prueba
+import apigenerica.controller.FicheroController;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import io.javalin.http.UploadedFile;
 
 /**
  * Punto de entrada de la API generica del ERP.
@@ -59,40 +92,33 @@ public class ApiGenerica {
         RolController rolCtrl = new RolController(new RolDao());
         AdminBdController adminBdCtrl = new AdminBdController();
         LogController logCtrl = new LogController();
-        EmpleadoController empleadoCtrl = new EmpleadoController(new EmpleadoService());
+        EmpleadoController empleadoCtrl = new EmpleadoController(new EmpleadoService()); // <- AÑADIDO
 
         final FicheroService fs = ficheroService;
         final FicheroController ficheroCtrl = (fs != null) ? new FicheroController(fs) : null;
 
         // ── Crear servidor Javalin ───────────────────────────────────
         Javalin app = Javalin.create(config -> {
-            // Habilitar CORS
             config.enableCorsForAllOrigins();
             config.enableDevLogging();
-            // Aumentar el límite de subida a 500 MB para soportar ficheros grandes
             config.maxRequestSize = 500_000_000L;
         }).start(7000);
 
-        // Middleware: interceptar petición antes de ejecutarse
         app.before(ctx -> {
             String path = ctx.path();
             String method = ctx.method();
 
-            // Si el método es OPTIONS, permitir el paso sin realizar comprobaciones
             if ("OPTIONS".equalsIgnoreCase(method)) {
                 return;
             }
 
-            // Rutas públicas
-            if (path.equals("/api/auth/login")
-                    || path.equals("/api/auth/signup")
-                    || path.equals("/api/auth/refresh")
+            if (path.startsWith("/api/auth")
                     || path.startsWith("/api/store")
-                    || path.equals("/api/test")) {
-                return; // Permitir paso sin realizar comprobaciones
+                    || path.equals("/test")
+                    || path.startsWith("/backup")) {
+                return;
             }
 
-            // Validar token 
             String authHeader = ctx.header("Authorization");
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 throw new NoAutorizadoException("Token no proporcionado.", null);
@@ -180,13 +206,9 @@ public class ApiGenerica {
         app.post("/api/metadata/relaciones",           ctx -> metaCtrl.crearRelacion(ctx));
         app.delete("/api/metadata/relaciones/{id}",    ctx -> metaCtrl.eliminarRelacion(ctx));
 
-        // ── Endpoints de autenticación ───────────────────────────────
-        app.post("/api/auth/login", ctx -> authCtrl.login(ctx));
+        // ── Endpoints de autenticacion ───────────────────────────────
+        app.post("/api/auth/login",   ctx -> authCtrl.login(ctx));
         app.post("/api/auth/refresh", ctx -> authCtrl.refresh(ctx));
-        app.post("/api/auth/signup", ctx -> authCtrl.registrar(ctx));
-        app.get("/api/auth/usuarios/{id}", ctx -> authCtrl.obtenerUsuario(ctx));
-        app.put("/api/auth/usuarios/{id}", ctx -> authCtrl.modificarUsuario(ctx));
-        app.delete("/api/auth/usuarios/{id}", ctx -> authCtrl.eliminar(ctx));
 
         // ── Endpoints de configuracion ERP ───────────────────────────
         app.get("/api/erp/config", ctx -> configCtrl.getConfig(ctx));
