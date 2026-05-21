@@ -243,13 +243,15 @@ public class ConexionMysql {
 
             // Tabla de Producto
             stmt.executeUpdate(
-                "CREATE TABLE IF NOT EXISTS `productos` (" +
-                "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
-                "  `nombre` VARCHAR(150) NOT NULL," +
-                "  `descripcion` TEXT DEFAULT NULL," +
-                "  `referencia` VARCHAR(150) DEFAULT NULL UNIQUE," +
-                "  `precio` DECIMAL(10, 2) NOT NULL," +
-                "  `esta_agotado` TINYINT(1) DEFAULT 0" +
+                "CREATE TABLE IF NOT EXISTS productos (" +
+                "  id INT AUTO_INCREMENT PRIMARY KEY," +
+                "  nombre VARCHAR(150) NOT NULL," +
+                "  descripcion TEXT DEFAULT NULL," +
+                "  referencia VARCHAR(150) DEFAULT NULL UNIQUE," +
+                "  cantidad INT DEFAULT NULL," +
+                "  precio DECIMAL(10, 2) NOT NULL," +
+                "  foto_url VARCHAR(255) DEFAULT NULL," +
+                "  esta_agotado BOOLEAN NOT NULL DEFAULT FALSE" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
 
