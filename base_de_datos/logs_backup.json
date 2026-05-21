@@ -1,0 +1,7 @@
+["1","sistema/web","INSERT","erp_modulos","Modulo creado externamente: 'asdasd'","2026-05-22 00:09:25.047"]
+["2","sistema/web","INSERT","erp_meta_tablas","Tabla de metadatos creada externamente: 'prueba123' (prueba123)","2026-05-22 00:09:50.085"]
+["3","sistema/web","INSERT","erp_meta_columnas","Columna creada externamente: 'id' tipo=entero nullable=0","2026-05-22 00:09:50.085"]
+["4","sistema/web","INSERT","erp_meta_columnas","Columna creada externamente: 'asdasdasdasd' tipo=cadena nullable=1","2026-05-22 00:09:50.086"]
+["5","sistema/web","INSERT","erp_meta_columnas","Columna creada externamente: 'asdxcsdsa' tipo=cadena nullable=1","2026-05-22 00:09:50.086"]
+["6","usuario#1","INSERT","prueba123","Registro insertado con id=1","2026-05-22 00:09:58.027"]
+["7","sistema/web","INSERT","prueba123","Fila insertada en 'prueba123' [pk=1] {id='1', asdasdasdasd='prueba', asdxcsdsa=''}","2026-05-22 00:10:00.105"]
