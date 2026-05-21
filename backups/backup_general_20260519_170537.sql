@@ -1,4 +1,4 @@
--- Backup general generado el 20260519_192521
+-- Backup general generado el 20260519_170537
 -- Bases: erp_sistema, erp_empresa
 
 -- ========== BD: erp_sistema ==========
@@ -28,11 +28,9 @@ CREATE TABLE `erp_ficheros` (
   `fecha_subida` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uuid` (`uuid`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-INSERT INTO `erp_ficheros` VALUES ('10', '95700b47-6e7b-468a-b632-6eee0ca629d0', '1DAM-PROG-U01-Introducción a los lenguajes de programación.pdf', 'application/pdf', NULL, '2367005', '0', NULL, 'documentos', '2026-05-17 17:53:14');
-INSERT INTO `erp_ficheros` VALUES ('11', '669507b1-2783-4182-af31-a510e94fe74f', '2025-12-05 00-04-25.mp4', 'video/mp4', NULL, '23206097', '1', 'storage\ficheros_seguros\documentos\669507b1-2783-4182-af31-a510e94fe74f_2025-12-05 00-04-25.mp4.enc', 'documentos', '2026-05-18 20:04:54');
-INSERT INTO `erp_ficheros` VALUES ('12', 'f8f50c43-7a37-41dc-bccb-2a63a5b41f3a', '2025-12-04 23-59-32.mp4', 'video/mp4', NULL, '21249059', '1', 'storage\ficheros_seguros\documentos\f8f50c43-7a37-41dc-bccb-2a63a5b41f3a_2025-12-04 23-59-32.mp4.enc', 'documentos', '2026-05-19 01:18:03');
+INSERT INTO `erp_ficheros` VALUES ('2', '827d13f0-2ee8-44c4-8945-f562b4b9ab11', 'Ingles.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', NULL, '16848', '0', NULL, 'documentos', '2026-05-18 18:51:47');
 
 DROP TABLE IF EXISTS `erp_meta_columnas`;
 CREATE TABLE `erp_meta_columnas` (
@@ -51,8 +49,21 @@ CREATE TABLE `erp_meta_columnas` (
   PRIMARY KEY (`id`),
   KEY `tabla_id` (`tabla_id`),
   CONSTRAINT `erp_meta_columnas_ibfk_1` FOREIGN KEY (`tabla_id`) REFERENCES `erp_meta_tablas` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=19 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+INSERT INTO `erp_meta_columnas` VALUES ('1', '1', 'id', 'entero', '0', '0', '1', '0', '0', '1', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('2', '1', 'hola', 'cadena', '1', '0', '1', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('8', '4', 'id', 'ENTERO', '0', '0', '1', '0', '0', '1', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('9', '4', 'descripcion', 'TEXTO_CORTO', '1', '0', '1', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('10', '4', 'password_test', 'CONTRASENA', '0', '1', '0', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('11', '5', 'id', 'ENTERO', '0', '0', '1', '0', '0', '1', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('12', '5', 'nombre', 'TEXTO_CORTO', '0', '0', '1', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('13', '6', 'id', 'entero', '0', '0', '1', '0', '0', '1', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('14', '6', 'hola', 'cadena', '1', '0', '1', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('15', '6', 'hihitler', 'DECIMAL(10,2)', '1', '0', '1', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('16', '7', 'id', 'ENTERO', '0', '0', '1', '0', '0', '1', '1', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('17', '7', 'hola', 'TEXTO_CORTO', '1', '0', '1', '0', '0', '0', '0', NULL);
+INSERT INTO `erp_meta_columnas` VALUES ('18', '7', 'hihitler', 'TEXTO_CORTO', '1', '0', '1', '0', '0', '0', '0', NULL);
 
 DROP TABLE IF EXISTS `erp_meta_relaciones`;
 CREATE TABLE `erp_meta_relaciones` (
@@ -78,8 +89,13 @@ CREATE TABLE `erp_meta_tablas` (
   UNIQUE KEY `nombre_logico` (`nombre_logico`),
   KEY `modulo_id` (`modulo_id`),
   CONSTRAINT `erp_meta_tablas_ibfk_1` FOREIGN KEY (`modulo_id`) REFERENCES `erp_modulos` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+INSERT INTO `erp_meta_tablas` VALUES ('1', '1', 'prueba123', 'prueba123');
+INSERT INTO `erp_meta_tablas` VALUES ('4', '1', 'productos_test', 'Tabla de Productos Test');
+INSERT INTO `erp_meta_tablas` VALUES ('5', '1', 'marcas_test', 'Marcas de Productos');
+INSERT INTO `erp_meta_tablas` VALUES ('6', '1', 'prueba123456', 'prueba123456');
+INSERT INTO `erp_meta_tablas` VALUES ('7', NULL, 'prueba1234', 'Prueba1234');
 
 DROP TABLE IF EXISTS `erp_modulos`;
 CREATE TABLE `erp_modulos` (
@@ -90,8 +106,10 @@ CREATE TABLE `erp_modulos` (
   `habilitado` tinyint(1) DEFAULT 1,
   `orden` int(11) DEFAULT 0,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+INSERT INTO `erp_modulos` VALUES ('1', 'hola', '📦', 'emote', '1', '1');
+INSERT INTO `erp_modulos` VALUES ('2', 'hola2', '📦', 'emote', '1', '1');
 
 DROP TABLE IF EXISTS `erp_roles`;
 CREATE TABLE `erp_roles` (
@@ -127,11 +145,46 @@ CREATE TABLE `erp_users` (
   `rol` varchar(50) NOT NULL,
   `activo` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-INSERT INTO `erp_users` VALUES ('2', 'admin@erp.com', '$2a$10$7QJ8z5v6Xk3mN9pL2wR4uOYvKjH1sDfGtCnE8aBqMxIoWlPeZr0yi', 'admin', '1');
+INSERT INTO `erp_users` VALUES ('1', 'admin@erp.com', '$2a$10$7QJ8z5v6Xk3mN9pL2wR4uOYvKjH1sDfGtCnE8aBqMxIoWlPeZr0yi', 'admin', '1');
 
 -- ========== BD: erp_empresa ==========
 CREATE DATABASE IF NOT EXISTS `erp_empresa` CHARACTER SET utf8mb4;
 USE `erp_empresa`;
+
+DROP TABLE IF EXISTS `marcas_test`;
+CREATE TABLE `marcas_test` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `nombre` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+DROP TABLE IF EXISTS `productos_test`;
+CREATE TABLE `productos_test` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `descripcion` varchar(255) DEFAULT NULL,
+  `password_test` char(60) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+DROP TABLE IF EXISTS `prueba123`;
+CREATE TABLE `prueba123` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `hola` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `prueba123` VALUES ('1', '[value-2]');
+
+DROP TABLE IF EXISTS `prueba1234`;
+CREATE TABLE `prueba1234` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `hola` varchar(255) DEFAULT NULL,
+  `hihitler` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 

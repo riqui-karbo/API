@@ -12,7 +12,6 @@ import java.io.PrintWriter;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import logs.service.LogService;
 
 /**
  * Controlador para operaciones administrativas sobre bases de datos. Permite
@@ -60,7 +59,7 @@ public class AdminBdController {
             throw new ValidacionException("El campo 'nombre' es obligatorio. ");
         }
         nombre = nombre.trim().replaceAll("\\s+", "_");
-        // Validar que no sea una BD del sistema
+// Validar que no sea una BD del sistema
         if (BDS_SISTEMA.contains(nombre.toLowerCase())) {
             throw new ValidacionException("No se puede crear una BD con ese nombre reservado. ");
         }
@@ -69,7 +68,6 @@ public class AdminBdController {
         } catch (SQLException e) {
             throw new BaseDatosException("Error al crear la base de datos ' " + nombre + "'. ", e);
         }
-        LogService.registrar("admin", "INSERT", nombre, "Base de datos creada: " + nombre);
         ctx.status(HttpCode.CREATED).json(ApiRespuesta.ok("Base de datos ' " + nombre + "' creada correctamente. "));
     }
 // ════════════════════════════════════════════════════════
@@ -86,7 +84,6 @@ public class AdminBdController {
         } catch (SQLException e) {
             throw new BaseDatosException("Error al borrar la base de datos ' " + nombre + "'. ", e);
         }
-        LogService.registrar("admin", "DELETE", nombre, "Base de datos Eliminada: " + nombre);
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok("Base de datos ' " + nombre + "' eliminada. "));
     }
 // ════════════════════════════════════════════════════════
@@ -262,7 +259,6 @@ public class AdminBdController {
         } catch (SQLException e) {
             throw new BaseDatosException("Error al crear tabla ' " + nombreTabla + "' en BD ' " + bd + "'. ", e);
         }
-        LogService.registrar("admin", "INSERT", bd + "." + nombreTabla, "Tabla creada: " + nombreTabla + "en BD: " + bd);
         ctx.status(HttpCode.CREATED).json(ApiRespuesta.ok("Tabla ' " + nombreTabla + "' creada correctamente en ' " + bd + "'. "));
     }
 // ════════════════════════════════════════════════════════
@@ -277,7 +273,6 @@ public class AdminBdController {
         } catch (SQLException e) {
             throw new BaseDatosException("Error al borrar tabla ' " + tabla + "' en BD ' " + bd + "'. ", e);
         }
-        LogService.registrar("admin", "DELETE", bd + "." + tabla, "Tabla eliminada: " + tabla + " de BD: " + bd);
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok("Tabla ' " + tabla + "' eliminada de ' " + bd + "'. "));
     }
 // ════════════════════════════════════════════════════════
@@ -352,7 +347,6 @@ public class AdminBdController {
         Map<String, String> respuesta = new LinkedHashMap<>();
         respuesta.put("archivo ", backupFile.getAbsolutePath());
         respuesta.put("nombre ", fileName);
-        LogService.registrar("admin", "BACKUP", bd, "Backup completo: riki tao y hector no hacen nada" + fileName);
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
     }
 // ════════════════════════════════════════════════════════
@@ -483,7 +477,6 @@ public class AdminBdController {
         respuesta.put("nombre", fileName);
         respuesta.put("archivo", backupFile.getAbsolutePath());
         respuesta.put("tamano", backupFile.length());
-        LogService.registrar("admin", "BACKUP", "general", "Backup general creado: gay el que lo lea en voz baja o en la mente" + fileName);
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
     }
 
@@ -577,7 +570,6 @@ public class AdminBdController {
         Map<String, Object> resultado = new LinkedHashMap<>();
         resultado.put("backup_restaurado", nombreBackup);
         resultado.put("mensaje", "Restauracion completada correctamente.");
-        LogService.registrar("admin", "RESTORE", "general", "Backup restaurado: " + nombreBackup);
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok(resultado));
     }
 }

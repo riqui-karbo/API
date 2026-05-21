@@ -1,4 +1,4 @@
-    /*
+/*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
-import logs.service.LogService;
 
 /**
  *
@@ -70,8 +69,6 @@ public class FicheroController {
                 if (stream != null) {
                     ctx.contentType(meta.getMimeType());
                     ctx.header("Content-Disposition", "attachment; filename=\"" + meta.getNombreFichero() + "\"");
-                    LogService.registrar("Sistema", "SELECT", "ficheros", "Descarga de fichero: "
-                            + meta.getNombreFichero() + " (uuid=" + uuid + ")");
                     ctx.result(stream);
                 } else { // Si el fichero no tiene contenido
                     throw new RecursoNoEncontradoException("El contenido del archivo ha desaparecido.");

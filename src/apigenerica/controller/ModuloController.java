@@ -112,4 +112,42 @@ public class ModuloController {
             throw new BaseDatosException("Error al eliminar módulo.", e);
         }
     }
+    
+    /**
+     * Obtiene la lista de tablas asociadas a un módulo específico
+     * Se filtra la tabla 'erp_meta_tablas' mediante el parámetro 'modulo_id'
+     * @param ctx Contexto de la petición HTTP
+     */
+    public void getTablasByModulo(Context ctx) {
+        //Recorre el parámetro que viene de PHP
+        String moduloId = ctx.queryParam("modulo_id");
+        
+        if (moduloId == null || !moduloId.matches("\\d+")){
+            ctx.status(400).json(ApiRespuesta.error("El parámetro modulo_id es obligatorio."));
+            return;
+        }
+        
+        String sql = "SELECT * FROM `erp_meta_tablas` WHERE modulo_id = ?";
+        List<Map<String, Object>> tablas = new ArrayList<>();
+        
+        try (Connection conn = ConexionMysql.getConexion("erp_sistema");
+            PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, Integer.parseInt(moduloId)); //Convierte el string a numero para el SQL
+                
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> tabla = new LinkedHashMap<>();
+                        tabla.put("id", rs.getInt("id"));
+                        tabla.put("nombre_logico", rs.getString("nombre_logico"));
+                        tabla.put("nombre_amigable", rs.getString("nombre_amigable"));
+                        tablas.add(tabla);
+                    }
+                }
+                ctx.json(ApiRespuesta.ok(tablas));
+        }catch (SQLException | NumberFormatException e) {
+            //Si hay un error lo lanzamos para que Javalin lo gestione
+            System.err.println("CRITICAL DB ERROR: " + e.getMessage());
+            throw new BaseDatosException("Error al obtener tablas del módulo.", e);
+        }
+    }
 }

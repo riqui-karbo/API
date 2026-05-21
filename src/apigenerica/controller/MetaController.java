@@ -251,4 +251,38 @@ public class MetaController {
             ctx.status(500).json(ApiRespuesta.error("Error en la base de datos al renombrar la columna: " + e.getMessage()));
         }
     }
+
+    public void crearRelacion(Context ctx) {
+        try {
+            apigenerica.model.RelacionConfig config = ctx.bodyAsClass(apigenerica.model.RelacionConfig.class);
+            metaService.crearRelacion(config);
+            ctx.status(201).json(ApiRespuesta.ok("Relación creada correctamente"));
+        } catch (ValidacionException e) {
+            ctx.status(400).json(ApiRespuesta.error(e.getMessage()));
+        } catch (Exception e) {
+            ctx.status(500).json(ApiRespuesta.error("Error al crear la relación: " + e.getMessage()));
+        }
+    }
+
+    public void listarRelaciones(Context ctx) {
+        try {
+            long tablaId = ctx.pathParamAsClass("tablaId", Long.class).get();
+            List<apigenerica.model.RelacionConfig> relaciones = metaService.listarRelaciones(tablaId);
+            ctx.json(ApiRespuesta.ok(relaciones));
+        } catch (Exception e) {
+            ctx.status(500).json(ApiRespuesta.error("Error al obtener relaciones: " + e.getMessage()));
+        }
+    }
+
+    public void eliminarRelacion(Context ctx) {
+        try {
+            int idRelacion = ctx.pathParamAsClass("id", Integer.class).get();
+            metaService.eliminarRelacion(idRelacion);
+            ctx.status(200).json(ApiRespuesta.ok("Relación eliminada correctamente."));
+        } catch (apigenerica.excepciones.RecursoNoEncontradoException e) {
+            ctx.status(404).json(ApiRespuesta.error(e.getMessage()));
+        } catch (Exception e) {
+            ctx.status(500).json(ApiRespuesta.error("Error al eliminar la relación: " + e.getMessage()));
+        }
+    }
 }

@@ -13,6 +13,7 @@ import java.util.List;
 public class TablaConfig {
     Long id;
     private Long moduloId;
+    private String imagenUuid;
     String nombreLogico;
     String nombreAmigable;
     List<ColumnaConfig> columnas;
@@ -66,4 +67,7 @@ public class TablaConfig {
     public void setRelaciones(List<RelacionConfig> relaciones) {
         this.relaciones = relaciones;
     }
+    
+    public String getImagenUuid() { return imagenUuid; }
+    public void setImagenUuid(String imagenUuid) { this.imagenUuid = imagenUuid; }
 }

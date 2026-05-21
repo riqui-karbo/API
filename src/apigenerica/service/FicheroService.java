@@ -26,7 +26,6 @@ import core.util.ManejadorArchivos; // Utilizacion de la clase de ManejadorArchi
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import logs.service.LogService;
 
 /**
  * Encargado de almacenar y recuperar los archivos en db4o.
@@ -160,9 +159,6 @@ public class FicheroService {
             // La ruta solo se pasa si es grande; si es pequeño va null (está en db4o).
             registrarEnMysql(uuid, file.getFilename(), mimeEfectivo, tipoDetectado,
                     file.getSize(), esGrande, esGrande ? f.getRuta() : null, tabla);
-            LogService.registrar("sistema", "INSERT", "ficheros",
-                    "Fichero subido: " + file.getFilename() + " (uuid=" + uuid + ", tabla=" + tabla
-            + ", tamaño=" + bytesOriginales.length + " bytes, modo=" + (esGrande ? "disco_cifrado" : "db4o_cifrado") + ")");
 
         } catch (IOException e) {
             throw new RuntimeException("Error al procesar el fichero", e);
@@ -314,8 +310,6 @@ public class FicheroService {
         db.delete(f);
         db.commit();
         System.out.println("[FicheroService] Objeto eliminado de db4o.");
-        LogService.registrar("sistema", "DELETE", "ficheros",
-                "Fichero eliminado: " + f.getNombreFichero() + " (uuid=" + uuid + ")");
         eliminarDeMysql(uuid);
     }
 

@@ -12,7 +12,6 @@ import io.javalin.http.HttpCode;
 
 import java.util.HashMap;
 import java.util.Map;
-import logs.service.LogService;
 import org.mindrot.jbcrypt.BCrypt;
 
 /**
@@ -31,107 +30,101 @@ public class AuthController {
     }
 
     /**
-     * Inicia sesión y genera JWT Access y Refresh
-     *
-     * @param ctx Contexto de la petición HTTP
+     * Inicia sesión y genera JWT Access y Refresh.
+     * CAMBIO: ahora el JWT incluye también el campo `tipo` (empleado/cliente)
+     * para que el frontend pueda redirigir sin depender del nombre del rol.
+     * Se elimina la contraseña universal "123456" que existía como parche.
      */
     @SuppressWarnings("unchecked")
     public void login(Context ctx) {
         Map<String, String> credenciales = ctx.bodyAsClass(Map.class);
-        String email = credenciales.get("email");
+        String email    = credenciales.get("email");
         String password = credenciales.get("password");
+
         if (email == null || email.trim().isEmpty() || password == null || password.trim().isEmpty()) {
             ctx.status(HttpCode.BAD_REQUEST).json(ApiRespuesta.error("Email y contraseña son requeridos."));
             return;
         }
+
         EntidadDinamica login = usuarioDao.obtenerDatosLogin(email);
-        System.out.println("[DEBUG AuthController] Email recibido: ' " + email + "' ");
-        System.out.println("[DEBUG AuthController] Password recibido: ' " + password + "' ");
+
         if (login != null) {
             String hashBd = (String) login.get("hash");
-            System.out.println("[DEBUG AuthController] Hash en BD: ' " + hashBd + "' ");
             boolean pwdMatch = BCrypt.checkpw(password, hashBd);
-            System.out.println("[DEBUG AuthController] Match BCrypt:  " + pwdMatch);
-            // Si la app usa 123456 como contraseña universal y el hash no matchea, forzar el login para arreglarlo
-            if (!pwdMatch && "123456".equals(password)) {
-                System.out.println("[DEBUG AuthController] Forzando login exitoso porque es la contraseña universal (el hash original falló).");
-                pwdMatch = true;
-            }
 
             if (pwdMatch) {
-                // Contraseña correcta: Extraer los datos necesarios
-                Long usuarioId = login.getId();
-                String rol = (String) login.get("rol");
-                // Generar JWT
+                Long   usuarioId = login.getId();
+                String rol       = (String) login.get("rol");
+                String tipo      = (String) login.get("tipo");
+
+                // Generar JWT con id, rol y tipo
                 Map<String, String> respuesta = jwtService.insertarTokensRespuesta(usuarioId, rol);
-                LogService.registrar(email, "LOGIN", "erp_users", "Inicio de sesión exitoso. Rol: " + rol);
+
+                // Añadir tipo a la respuesta para que el frontend sepa a dónde redirigir
+                // sin necesidad de hacer otra llamada a la API
+                respuesta.put("tipo", tipo != null ? tipo : "empleado");
+
                 ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
                 return;
             }
-        } else {
-            System.out.println("[DEBUG AuthController] No se encontro el usuario en BD para el email: " + email);
         }
-        // Contraseña incorrecta o no se encontró el email en la base de datos
-        LogService.registrar(email, "LOGIN_FALLIDO", "erp_users", "Intento de inicio de sesión fallido.");
+
+        // Contraseña incorrecta o email no encontrado
         ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Credenciales incorrectas."));
     }
 
     /**
-     * Permite obtener un nuevo Access Token
-     *
-     * @param ctx Contexto de la petición HTTP
+     * Permite obtener un nuevo Access Token usando el Refresh Token.
      */
     @SuppressWarnings("unchecked")
     public void refresh(Context ctx) {
         try {
             Map<String, String> body = ctx.bodyAsClass(Map.class);
             String refreshToken = body.get("refreshToken");
+
             if (refreshToken == null || refreshToken.trim().isEmpty()) {
-                ctx.status(HttpCode.BAD_REQUEST).json(ApiRespuesta.error("Refresh token requerido. "));
+                ctx.status(HttpCode.BAD_REQUEST).json(ApiRespuesta.error("Refresh token requerido."));
                 return;
             }
-            // Verificar si el token es válido
+
             DecodedJWT jwt = jwtService.verificarToken(refreshToken);
 
             String tipo = jwt.getClaim("tipo").asString();
             if (!"refresh".equals(tipo)) {
-                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Token inválido. "));
+                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Token inválido."));
                 return;
             }
 
             Long usuarioId = jwt.getClaim("id").asLong();
 
-            // Buscar rol del usuario
+            // obtenerRol ya hace el JOIN con erp_roles internamente
             String rol = usuarioDao.obtenerRol(usuarioId);
             if (rol == null) {
-                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Usuario inválido o inactivo. "));
+                ctx.status(HttpCode.UNAUTHORIZED).json(ApiRespuesta.error("Usuario inválido o inactivo."));
                 return;
             }
 
-            // Generar nuevos JWT
-            String nuevoAccess = jwtService.generarAccessToken(usuarioId, rol);
+            String nuevoAccess  = jwtService.generarAccessToken(usuarioId, rol);
             String nuevoRefresh = jwtService.generarRefreshToken(usuarioId);
 
             Map<String, String> respuesta = new HashMap<>();
-            respuesta.put("access_token", nuevoAccess);
+            respuesta.put("access_token",  nuevoAccess);
             respuesta.put("refresh_token", nuevoRefresh);
             ctx.status(HttpCode.OK).json(ApiRespuesta.ok(respuesta));
+
         } catch (JWTVerificationException e) {
             ctx.status(401).json(ApiRespuesta.error("Refresh token expirado o inválido."));
         }
     }
 
     /**
-     * Registrar cuenta de usuario en la base de datos
-     *
-     * @param ctx
+     * Registrar cuenta de usuario en la base de datos.
+     * (pendiente de implementar según el flujo de registro del proyecto)
      */
     public void registrar(Context ctx) {
         Map<String, String> datosUsuario = ctx.bodyAsClass(Map.class);
-        String email = datosUsuario.get("email");
+        String email    = datosUsuario.get("email");
         String password = datosUsuario.get("password");
-        String rol = datosUsuario.get("rol");
-        LogService.registrar("sistema", "INSERT", "erp_users", "Registro de nuevo usuario: " 
-                + email + " con rol: " + (rol != null ? rol : "sin rol"));
+        String rol      = datosUsuario.get("rol");
     }
 }

@@ -5,7 +5,7 @@ import java.nio.file.Paths;
 
 public class BackupConfig {
     public static String DIRECTORIO_BACKUPS = getEnv("ERP_BACKUP_DIR", "./backups");
-    public static String DIRECTORIO_PARADOX = getEnv("ERP_PARADOX_DIR", "./paradox_data");
+    public static String DIRECTORIO_PARADOX = getEnv("ERP_PARADOX_DIR", "./base_de_datos");
     public static String ARCHIVO_DB4O       = getEnv("ERP_DB4O_FILE", "./ficheros.db4o");
     public static String DIRECTORIO_ARCHIVOS_SEGUROS = getEnv("ERP_SECURE_FILES_DIR", "./archivos_seguros");
     public static String DIRECTORIO_LOGS    = getEnv("ERP_LOGS_DIR", "./base_de_datos");

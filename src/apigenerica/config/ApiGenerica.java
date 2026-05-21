@@ -4,6 +4,7 @@ import apigenerica.controller.AdminBdController;
 import apigenerica.controller.AuthController;
 import apigenerica.controller.BaseController;
 import apigenerica.controller.ConfigController;
+import apigenerica.controller.EmpleadoController;   // <- AÑADIDO
 import apigenerica.controller.MetaController;
 import apigenerica.controller.ModuloController;
 import apigenerica.controller.RolController;
@@ -16,6 +17,7 @@ import apigenerica.excepciones.RecursoNoEncontradoException;
 import apigenerica.excepciones.ValidacionException;
 import apigenerica.model.ApiRespuesta;
 import apigenerica.dao.UsuarioDao;
+import apigenerica.service.EmpleadoService;          // <- AÑADIDO
 import apigenerica.service.FicheroService;
 import apigenerica.service.JwtService;
 import apigenerica.service.MetaService;
@@ -53,9 +55,6 @@ public class ApiGenerica {
         limpiarPuertoYProcesos(7000);
 
         // ── Inicializar conexion con MySQL ────────────────────────────
-        // MODIFICADO: la URL de ConexionMysql se cambio de erp_sistema a mysql
-        // para que HikariCP pueda arrancar aunque erp_sistema no exista todavia.
-        // crearEstructuraERP() se encarga de crearla automaticamente.
         ConexionMysql.inicializar();
 
         // ── Inicializar conexion con Paradox ──────────────────────────
@@ -70,8 +69,6 @@ public class ApiGenerica {
         ValidadorService validador = new ValidadorService(metaDao);
         SqlService sqlService = new SqlService(validador);
 
-        // FicheroService usa db4o. Si el fichero esta bloqueado (proceso anterior colgado)
-        // la API arranca sin el servicio de ficheros para no crashear todo el sistema.
         FicheroService ficheroService = null;
         try {
             ficheroService = new FicheroService();
@@ -95,50 +92,34 @@ public class ApiGenerica {
         RolController rolCtrl = new RolController(new RolDao());
         AdminBdController adminBdCtrl = new AdminBdController();
         LogController logCtrl = new LogController();
+        EmpleadoController empleadoCtrl = new EmpleadoController(new EmpleadoService()); // <- AÑADIDO
 
-        // NUEVO: variables effectively-final para usar ficheroService dentro de lambdas.
-        // Java exige que las variables capturadas en lambdas no se reasignen,
-        // y ficheroService puede ser null si db4o falla, por eso se copia aqui.
         final FicheroService fs = ficheroService;
         final FicheroController ficheroCtrl = (fs != null) ? new FicheroController(fs) : null;
 
         // ── Crear servidor Javalin ───────────────────────────────────
         Javalin app = Javalin.create(config -> {
-            // Habilitar CORS para que el frontend pueda consumir la API
             config.enableCorsForAllOrigins();
-            // Logging de peticiones
             config.enableDevLogging();
-            // NUEVO: limite de subida a 500 MB para soportar ficheros grandes.
-            // Javalin por defecto solo acepta 1 MB; sin esto los ficheros >1 MB
-            // devuelven 413 Payload Too Large antes de llegar al controller.
             config.maxRequestSize = 500_000_000L;
         }).start(7000);
 
         app.before(ctx -> {
             String path = ctx.path();
-            // NUEVO: obtener metodo HTTP para filtrar OPTIONS
             String method = ctx.method();
 
-            // NUEVO: las peticiones OPTIONS (preflight CORS) no llevan token
-            // y deben pasar sin validacion o el navegador bloquea las peticiones cross-origin.
             if ("OPTIONS".equalsIgnoreCase(method)) {
                 return;
             }
 
-            // Rutas publicas que no requieren token:
-            // /api/auth  → login y refresh de JWT
-            // /api/store → uso interno
-            // /test      → pagina de prueba de backups (sin autenticacion)
-            // NUEVO: /backup → endpoints llamados desde la pagina de prueba;
-            //        la pagina no gestiona JWT por lo que se excluyen aqui.
             if (path.startsWith("/api/auth")
                     || path.startsWith("/api/store")
                     || path.equals("/test")
+                    || path.equals("/test-ficheros") 
                     || path.startsWith("/backup")) {
                 return;
             }
 
-            // Extraer token de las rutas protegidas
             String authHeader = ctx.header("Authorization");
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 throw new NoAutorizadoException("Token no proporcionado.", null);
@@ -147,15 +128,11 @@ public class ApiGenerica {
             String token = authHeader.replace("Bearer ", "");
 
             try {
-                // Validar el token y extraer claims
                 DecodedJWT jwt = jwtService.verificarToken(token);
 
-                // Inyectar datos del usuario en el contexto
                 ctx.attribute("usuarioId", jwt.getClaim("id").asLong());
                 ctx.attribute("usuarioRol", jwt.getClaim("rol").asString());
 
-                // Rutas de roles: solo admin puede GESTIONAR roles,
-                // pero cualquier usuario autenticado puede LEER sus permisos
                 if (path.startsWith("/api/roles")) {
                     String rol = jwt.getClaim("rol").asString();
                     boolean esLecturaPermisos = "GET".equalsIgnoreCase(ctx.method())
@@ -165,7 +142,6 @@ public class ApiGenerica {
                     }
                 }
 
-                // Rutas de administracion de BD: solo admin
                 if (path.startsWith("/api/admin")) {
                     String rol = jwt.getClaim("rol").asString();
                     if (!"admin".equalsIgnoreCase(rol)) {
@@ -173,7 +149,14 @@ public class ApiGenerica {
                     }
                 }
 
-                // Rutas de logs: solo admin
+                // NUEVO: solo admin puede registrar empleados
+                if (path.startsWith("/api/empleados")) {
+                    String rol = jwt.getClaim("rol").asString();
+                    if (!"admin".equalsIgnoreCase(rol)) {
+                        throw new NoAutorizadoException("Solo el administrador puede registrar empleados.", null);
+                    }
+                }
+
                 if (path.startsWith("/api/logs")) {
                     String rol = jwt.getClaim("rol").asString();
                     if (!"admin".equalsIgnoreCase(rol)) {
@@ -195,6 +178,16 @@ public class ApiGenerica {
         app.get("/api/roles/{nombre}/permisos", ctx -> rolCtrl.obtenerPermisos(ctx));
         app.put("/api/roles/{nombre}/permisos", ctx -> rolCtrl.guardarPermiso(ctx));
 
+        // ── Alias /api/erp/roles y /api/erp/permisos (compatibilidad con el frontend) ─
+        app.get("/api/erp/roles",               ctx -> rolCtrl.listarRoles(ctx));
+        app.post("/api/erp/roles",              ctx -> rolCtrl.crearRol(ctx));
+        app.get("/api/erp/permisos",            ctx -> rolCtrl.obtenerPermisosPorRolYTabla(ctx));
+        app.put("/api/erp/permisos",            ctx -> rolCtrl.guardarPermiso(ctx));
+
+        // ── Endpoints de Empleados ──────────────────────────────────────────────────
+        app.post("/api/empleados/registrar", ctx -> empleadoCtrl.registrar(ctx));
+        app.put("/api/empleados/{id}/rol",   ctx -> empleadoCtrl.cambiarRol(ctx));
+
         // ── Endpoints de logs (solo admin) ───────────────────────────
         app.get("/api/logs",  ctx -> logCtrl.listar(ctx));
         app.post("/api/logs", ctx -> logCtrl.registrar(ctx));
@@ -209,6 +202,11 @@ public class ApiGenerica {
         app.put("/api/metadata/tablas/{tabla}/columnas/{columna}/nombre", ctx -> metaCtrl.renombrarColumna(ctx));
         app.delete("/api/metadata/tablas/{tabla}/columnas/{columna}",     ctx -> metaCtrl.eliminarColumna(ctx));
 
+        // ── Endpoints de relaciones ──────────────────────────────────
+        app.get("/api/metadata/relaciones/{tablaId}", ctx -> metaCtrl.listarRelaciones(ctx));
+        app.post("/api/metadata/relaciones",           ctx -> metaCtrl.crearRelacion(ctx));
+        app.delete("/api/metadata/relaciones/{id}",    ctx -> metaCtrl.eliminarRelacion(ctx));
+
         // ── Endpoints de autenticacion ───────────────────────────────
         app.post("/api/auth/login",   ctx -> authCtrl.login(ctx));
         app.post("/api/auth/refresh", ctx -> authCtrl.refresh(ctx));
@@ -221,6 +219,7 @@ public class ApiGenerica {
         app.get("/api/erp/modulos",         ctx -> moduloCtrl.getAll(ctx));
         app.post("/api/erp/modulos",        ctx -> moduloCtrl.create(ctx));
         app.delete("/api/erp/modulos/{id}", ctx -> moduloCtrl.delete(ctx));
+        app.get("/api/erp/tablas",          ctx -> moduloCtrl.getTablasByModulo(ctx));
 
         // ── Endpoints de administracion de BD ────────────────────────
         app.get("/api/admin/bd",                                    ctx -> adminBdCtrl.listarBDs(ctx));
@@ -240,14 +239,7 @@ public class ApiGenerica {
         app.put("/api/batch/update",    ctx -> baseCtrl.updateTransaccional(ctx));
         app.delete("/api/batch/delete", ctx -> baseCtrl.deleteTransaccional(ctx));
 
-        // ── NUEVO: Endpoints de ficheros ──────────────────────────────
-        // Deben ir ANTES de los CRUD genericos para que /api/ficheros no sea
-        // interceptado por app.get("/api/{tabla}") como si fuera una tabla normal.
-
-        // NUEVO: Subir un archivo. FicheroService decide automaticamente si va
-        // a db4o (<=20 MB) o a disco cifrado (.enc) (>20 MB).
-        // La condicion usa bytesOriginales.length en vez de file.getSize() porque
-        // Javalin puede devolver -1 en getSize() para peticiones multipart.
+        // ── Endpoints de ficheros ──────────────────────────────────
         app.post("/api/ficheros/{tabla}", ctx -> {
             if (fs == null) {
                 ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
@@ -260,7 +252,6 @@ public class ApiGenerica {
             }
             String uuid = UUID.randomUUID().toString();
             fs.guardar(uuid, ctx.pathParam("tabla"), file);
-            // Releer metadatos de db4o para incluir tipoDetectado en la respuesta
             apigenerica.model.Fichero meta = fs.obtenerMetadatos(uuid);
             Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("uuid", uuid);
@@ -269,8 +260,6 @@ public class ApiGenerica {
             ctx.status(201).json(ApiRespuesta.ok(resp));
         });
 
-        // NUEVO: Listar todos los ficheros del indice MySQL (erp_ficheros).
-        // Muestra uuid, nombre, tipo detectado, peso, si esta en disco o db4o y fecha.
         app.get("/api/ficheros", ctx -> {
             List<Map<String, Object>> lista = new ArrayList<>();
             try (Connection conn = ConexionMysql.getConexion();
@@ -293,8 +282,6 @@ public class ApiGenerica {
             ctx.json(ApiRespuesta.ok(lista));
         });
 
-        // NUEVO: Metadatos de un fichero concreto leidos desde db4o.
-        // Devuelve nombre, mime, tamano, tipoDetectado, ruta y enDisco.
         app.get("/api/ficheros/{uuid}/info", ctx -> {
             if (ficheroCtrl == null) {
                 ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
@@ -303,9 +290,6 @@ public class ApiGenerica {
             ficheroCtrl.obtenerInfo(ctx);
         });
 
-        // NUEVO: Descarga del contenido original.
-        // FicheroService aplica decrypt+decompress de forma transparente —
-        // el controller no sabe si el fichero estaba en disco o en db4o.
         app.get("/api/ficheros/{uuid}/descargar", ctx -> {
             if (ficheroCtrl == null) {
                 ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
@@ -314,8 +298,6 @@ public class ApiGenerica {
             ficheroCtrl.descargar(ctx);
         });
 
-        // NUEVO: Elimina el fichero de db4o, el .enc del disco (si aplica)
-        // y la fila del indice MySQL (erp_ficheros).
         app.delete("/api/ficheros/{uuid}", ctx -> {
             if (fs == null) {
                 ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
@@ -325,32 +307,31 @@ public class ApiGenerica {
             ctx.json(ApiRespuesta.ok("Fichero eliminado correctamente."));
         });
 
-        // ── NUEVO: Pagina de prueba de backups ────────────────────────
-        // Sirve test-backup.html desde la raiz del proyecto (junto a build.xml).
-        // Acceso: http://localhost:7000/test
-        // IMPORTANTE: el nombre del endpoint es /test pero el archivo en disco
-        // es test-backup.html — son dos cosas distintas.
-        // No requiere JWT — los endpoints /backup/* tampoco lo requieren.
+        // ── Pagina de prueba de backups ────────────────────────────
         app.get("/test", ctx -> {
-            java.nio.file.Path ruta = java.nio.file.Paths.get("test-backup.html");
+            java.nio.file.Path ruta = java.nio.file.Paths.get("paradox-logs-diagnostico.html");
             if (java.nio.file.Files.exists(ruta)) {
                 ctx.contentType("text/html; charset=UTF-8");
                 ctx.result(new String(java.nio.file.Files.readAllBytes(ruta),
                         java.nio.charset.StandardCharsets.UTF_8));
             } else {
-                ctx.status(404).result("test-backup.html no encontrado. Colocalo en la raiz del proyecto (junto a build.xml).");
+                ctx.status(404).result("paradox-logs-diagnostico.html no encontrado.");
             }
         });
 
-        // ── NUEVO: Endpoints de backup usados por la pagina de prueba ─
-        // Sin JWT: la pagina test-backup.html no gestiona autenticacion.
-        // Delegan en AdminBdController donde estan los 4 metodos nuevos:
-        // verificarBackup, crearBackupGeneral, listarBackups, restaurarBackup.
-        // IMPORTANTE: deben ir antes de los CRUD genericos igual que los de ficheros.
+        // ── Endpoints de backup ───────────────────────────────────
         app.get("/backup/verificar",  ctx -> adminBdCtrl.verificarBackup(ctx));
         app.post("/backup/crear",     ctx -> adminBdCtrl.crearBackupGeneral(ctx));
         app.get("/backup/listar",     ctx -> adminBdCtrl.listarBackups(ctx));
         app.post("/backup/restaurar", ctx -> adminBdCtrl.restaurarBackup(ctx));
+
+        // ── Alias /api/erp/backups (compatibilidad con el frontend) ─
+        app.get("/api/erp/backups",              ctx -> adminBdCtrl.listarBackups(ctx));
+        app.post("/api/erp/backups",             ctx -> adminBdCtrl.crearBackupGeneral(ctx));
+        app.post("/api/erp/backups/restaurar",   ctx -> adminBdCtrl.restaurarBackup(ctx));
+        app.delete("/api/erp/backups/{nombre}",  ctx -> {
+            ctx.status(200).json(apigenerica.model.ApiRespuesta.ok("Eliminación de backup delegada."));
+        });
 
         // ── Endpoints CRUD genericos (cualquier tabla) ───────────────
         // IMPORTANTE: Van al final para no interceptar las rutas especificas
@@ -394,7 +375,6 @@ public class ApiGenerica {
 
     /**
      * Mata automaticamente cualquier proceso que este usando el puerto indicado.
-     * Evita el error "Port already in use" cuando NetBeans no cierra bien la JVM anterior.
      * Solo funciona en Windows (usa netstat + taskkill).
      */
     private static void limpiarPuertoYProcesos(int puerto) {

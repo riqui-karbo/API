@@ -26,11 +26,11 @@ public class ConexionParadox {
 
     // ── Configuración ────────────────────────────────────────────────────────
     /**
-     * Ruta al directorio que contiene los ficheros .DB de Paradox.
-     * Puede ser absoluta (C:/datos/paradox) o relativa al working-directory.
-     * Ajusta este valor según el entorno de despliegue.
+     * Ruta al DIRECTORIO que contiene los ficheros .DB de Paradox.
+     * El driver HXTT apunta al directorio; cada tabla es un .DB dentro.
+     * base_paradox.db se crea automáticamente en inicializar().
      */
-    private static final String RUTA_PARADOX = "paradox_data";
+    private static final String RUTA_PARADOX = "base_de_datos";
     private static final int LIMITE_QUERIES_CONEXION = 45;
 
     // ── Estado interno ───────────────────────────────────────────────────────
@@ -56,11 +56,15 @@ public class ConexionParadox {
             // Crear el directorio si no existe
             crearDirectorioSiNoExiste();
 
-            // Cargar el driver HXTT Paradox explícitamente
+            // Crear base_paradox.db fisicamente ANTES de abrir la conexion principal
+            crearArchivoDB();
+
+            // Cargar el driver HXTT Paradox explicitamente
             Class.forName("com.hxtt.sql.paradox.ParadoxDriver");
 
             // Abrir conexión: jdbc:paradox:///<ruta>
-            String url = "jdbc:paradox:///" + RUTA_PARADOX;
+            String rutaNorm = new java.io.File(RUTA_PARADOX).getAbsolutePath().replace("\\", "/");
+            String url = "jdbc:paradox:///" + rutaNorm;
             conexion = DriverManager.getConnection(url);
             conexion.setAutoCommit(false);
             contadorQueries.set(0);
@@ -83,7 +87,54 @@ public class ConexionParadox {
     }
 
     /**
-     * Crea el directorio de datos de Paradox si no existe.
+     * Crea fisicamente el archivo base_paradox.db en base_de_datos/ si no existe.
+     *
+     * CRITICO: se abre una conexion PROPIA con autoCommit=true y se cierra
+     * inmediatamente despues. Asi el driver HXTT escribe el .DB en disco
+     * antes de que la conexion principal (autoCommit=false) la use.
+     * Si se hace sobre la conexion principal el archivo nunca llega a disco.
+     */
+    private static void crearArchivoDB() {
+        File archivo = new File(RUTA_PARADOX + File.separator + "base_paradox.db");
+        if (archivo.exists()) {
+            System.out.println("[Paradox] base_paradox.db ya existe — OK.");
+            return;
+        }
+        Connection conTemp = null;
+        try {
+            Class.forName("com.hxtt.sql.paradox.ParadoxDriver");
+            String rutaNorm = new File(RUTA_PARADOX).getAbsolutePath().replace("\\", "/");
+            conTemp = DriverManager.getConnection("jdbc:paradox:///" + rutaNorm);
+            conTemp.setAutoCommit(true);
+            try (Statement stmt = conTemp.createStatement()) {
+                stmt.executeUpdate(
+                    "CREATE TABLE paradox_sensibles (" +
+                    "tabla_id   INTEGER,"              +
+                    "columna_id INTEGER,"              +
+                    "pk         VARCHAR(50),"          +
+                    "valor      VARCHAR(255)"          +
+                    ")"
+                );
+            }
+            System.out.println("[Paradox] base_paradox.db (tabla paradox_sensibles) creado en: " + archivo.getAbsolutePath());
+        } catch (ClassNotFoundException e) {
+            System.err.println("[Paradox] Driver no encontrado al crear base_paradox.db: " + e.getMessage());
+        } catch (SQLException e) {
+            String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            if (msg.contains("already") || msg.contains("exist") || msg.contains("duplicate")) {
+                System.out.println("[Paradox] base_paradox.db ya existia en BD — OK.");
+            } else {
+                System.err.println("[Paradox] Error creando base_paradox.db: " + e.getMessage());
+            }
+        } finally {
+            if (conTemp != null) {
+                try { conTemp.close(); } catch (SQLException ignored) {}
+            }
+        }
+    }
+
+    /**
+     * Crea el directorio base_de_datos/ si no existe.
      * No hace nada si ya existe.
      */
     private static void crearDirectorioSiNoExiste() {
@@ -203,7 +254,8 @@ public class ConexionParadox {
         try {
             // Asegurarse de que el directorio sigue existiendo al renovar
             crearDirectorioSiNoExiste();
-            String url = "jdbc:paradox:///" + RUTA_PARADOX;
+            String rutaNorm = new java.io.File(RUTA_PARADOX).getAbsolutePath().replace("\\", "/");
+            String url = "jdbc:paradox:///" + rutaNorm;
             conexion = DriverManager.getConnection(url);
             conexion.setAutoCommit(false);
             contadorQueries.set(0);

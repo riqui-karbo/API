@@ -693,7 +693,8 @@ public class BaseController {
                 }
             }
         } catch (Exception e) {
-            throw new BaseDatosException("Error al recuperar datos sensibles.", e);
+            System.err.println("[API] AVISO: No se pudieron leer datos sensibles de Paradox: " + e.getMessage());
+            // Paradox no disponible: continuamos sin datos sensibles
         }
     }
 
@@ -706,18 +707,25 @@ public class BaseController {
      */
     private void guardarSensibles(EntidadDinamica entidad, List<ColumnaConfig> columnas,
             long tablaId, Long pkExistente) {
-        try {
-            for (ColumnaConfig col : columnas) {
-                if (!col.isSensible()) continue;
+        for (ColumnaConfig col : columnas) {
+            if (!col.isSensible()) continue;
 
-                Object val = entidad.get(col.getNombre());
-                if (val == null) continue;
+            Object val = entidad.get(col.getNombre());
 
+            // SIEMPRE eliminar el campo de la entidad antes de que llegue a MySQL.
+            // La columna sensible en MySQL es VARCHAR(1) NULL (placeholder).
+            // El dato real va cifrado a Paradox; MySQL nunca lo ve.
+            entidad.getTodo().remove(col.getNombre());
+
+            if (val == null) continue;
+
+            // Intentar guardar en Paradox. Si falla se loguea pero el INSERT
+            // en MySQL sigue adelante (columna quedara NULL en MySQL).
+            try {
                 String enc = cifrado.encriptar(val.toString());
                 String sql = pkExistente == null
                         ? "INSERT INTO paradox_sensibles (tabla_id, columna_id, pk, valor) VALUES (?,?,?,?)"
                         : "REPLACE INTO paradox_sensibles (tabla_id, columna_id, pk, valor) VALUES (?,?,?,?)";
-
                 try (PreparedStatement ps = ConexionParadox.getConexion().prepareStatement(sql)) {
                     ps.setLong(1, tablaId);
                     ps.setLong(2, col.getId());
@@ -727,12 +735,9 @@ public class BaseController {
                     ConexionParadox.getConexion().commit();
                     ConexionParadox.contarUso();
                 }
-
-                // Remover de la entidad: no va a MySQL, solo a Paradox
-                entidad.getTodo().remove(col.getNombre());
+            } catch (Exception e) {
+                System.err.println("[API] AVISO: No se pudo guardar campo sensible '" + col.getNombre() + "' en Paradox: " + e.getMessage());
             }
-        } catch (Exception e) {
-            throw new BaseDatosException("Error al guardar datos sensibles.", e);
         }
     }
 
@@ -753,7 +758,7 @@ public class BaseController {
                 ConexionParadox.contarUso();
             }
         } catch (Exception e) {
-            throw new BaseDatosException("Error al actualizar PK en datos sensibles.", e);
+            System.err.println("[API] AVISO: No se pudo actualizar PK en Paradox: " + e.getMessage());
         }
     }
 

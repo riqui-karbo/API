@@ -58,7 +58,7 @@ public class Fichero {
     // Eso devolvía TRUE cuando la ruta estaba VACÍA, es decir, siempre false en
     // archivos reales. La condición correcta es !isEmpty(): si hay ruta, está en disco.
     public boolean isEnDisco() {
-        return this.ruta != null && this.ruta.isEmpty();
+        return this.ruta != null && !this.ruta.isEmpty();
     }
 
     // Getters y setters
