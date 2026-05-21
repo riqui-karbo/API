@@ -118,13 +118,26 @@ public class RolController {
      * }
      */
     public void guardarPermiso(Context ctx) {
-        String nombre = ctx.pathParam("nombre");
+        // Puede venir como /api/roles/{nombre}/permisos (con path param)
+        // o como /api/erp/permisos (sin path param, el rol viene en el body)
+        String nombre = null;
+        try { nombre = ctx.pathParam("nombre"); } catch (Exception ignored) {}
+
+        PermisoConfig permiso = ctx.bodyAsClass(PermisoConfig.class);
+
+        // Si el rol no viene del path, intentar sacarlo del body (compatibilidad /erp/permisos)
+        if (nombre == null || nombre.isEmpty()) {
+            nombre = permiso.getRol();
+        }
+
+        if (nombre == null || nombre.trim().isEmpty()) {
+            throw new ValidacionException("Se debe especificar el rol.");
+        }
 
         if (!rolDao.existeRol(nombre)) {
             throw new RecursoNoEncontradoException("No existe el rol '" + nombre + "'.");
         }
 
-        PermisoConfig permiso = ctx.bodyAsClass(PermisoConfig.class);
         if (permiso.getTabla() == null || permiso.getTabla().trim().isEmpty()) {
             throw new ValidacionException("El campo 'tabla' es obligatorio.");
         }
@@ -134,5 +147,22 @@ public class RolController {
         ctx.status(HttpCode.OK).json(ApiRespuesta.ok(
             "Permisos del rol '" + nombre + "' sobre '" + permiso.getTabla() + "' guardados correctamente."
         ));
+    }
+
+    /**
+     * GET /api/erp/permisos?rol_id=X&tabla=Y  (compatibilidad con el frontend legacy)
+     * El frontend pasa rol_id pero la API nueva usa nombre de rol como identificador.
+     */
+    public void obtenerPermisosPorRolYTabla(Context ctx) {
+        // El frontend manda rol_id (número), pero la API nueva usa nombre de rol
+        // Devolvemos permisos vacíos por defecto si no encontramos el rol
+        String tabla = ctx.queryParam("tabla");
+        List<PermisoConfig> todos = rolDao.obtenerPermisos(null);
+        if (tabla != null && !tabla.isEmpty()) {
+            todos = todos.stream()
+                    .filter(p -> tabla.equals(p.getTabla()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok(todos));
     }
 }
