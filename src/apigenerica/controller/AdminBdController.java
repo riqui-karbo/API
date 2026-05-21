@@ -489,8 +489,9 @@ public class AdminBdController {
         List<Map<String, Object>> backups = new ArrayList<>();
 
         if (backupDir.exists() && backupDir.isDirectory()) {
+            // Muestra tanto los nuevos backups completos (.zip) como los legados (.sql)
             File[] ficheros = backupDir.listFiles(
-                    (dir, name) -> name.endsWith(".sql"));
+                    (dir, name) -> name.endsWith(".zip") || name.endsWith(".sql"));
             if (ficheros != null) {
                 // Ordenar por fecha de modificacion, mas reciente primero
                 Arrays.sort(ficheros, (a, b)

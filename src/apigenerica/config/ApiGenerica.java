@@ -1,6 +1,8 @@
 package apigenerica.config;
 
 import apigenerica.controller.AdminBdController;
+import apigenerica.backup.BackupController;
+import apigenerica.backup.BackupOrchestrator;
 import apigenerica.controller.AuthController;
 import apigenerica.controller.BaseController;
 import apigenerica.controller.ConfigController;
@@ -91,6 +93,7 @@ public class ApiGenerica {
         MetaController metaCtrl = new MetaController(metaService, validador, orderService, sqlService);
         RolController rolCtrl = new RolController(new RolDao());
         AdminBdController adminBdCtrl = new AdminBdController();
+        BackupOrchestrator backupOrchestrator = new BackupOrchestrator();
         LogController logCtrl = new LogController();
         EmpleadoController empleadoCtrl = new EmpleadoController(new EmpleadoService()); // <- AÑADIDO
 
@@ -268,16 +271,54 @@ public class ApiGenerica {
             }
         });
 
-        // ── Endpoints de backup ───────────────────────────────────
+        // ── Endpoints de backup (nuevo sistema: MySQL + db4o + Paradox + Logs → ZIP único) ──
         app.get("/backup/verificar",  ctx -> adminBdCtrl.verificarBackup(ctx));
-        app.post("/backup/crear",     ctx -> adminBdCtrl.crearBackupGeneral(ctx));
         app.get("/backup/listar",     ctx -> adminBdCtrl.listarBackups(ctx));
-        app.post("/backup/restaurar", ctx -> adminBdCtrl.restaurarBackup(ctx));
+
+        // POST /backup/crear → BackupOrchestrator: genera backup_erp_<ts>.zip con todo incluido
+        app.post("/backup/crear", ctx -> {
+            try {
+                java.io.File resultado = backupOrchestrator.ejecutarBackupCompleto();
+                java.util.Map<String, Object> datos = new java.util.LinkedHashMap<>();
+                datos.put("nombre",  resultado.getName());
+                datos.put("archivo", resultado.getAbsolutePath());
+                datos.put("tamano",  resultado.length());
+                datos.put("descripcion", "ZIP con MySQL (.sql) + db4o (.zip) + Paradox (dir) + Logs (.txt)");
+                ctx.status(200).json(apigenerica.model.ApiRespuesta.ok(datos));
+            } catch (Exception e) {
+                ctx.status(500).json(apigenerica.model.ApiRespuesta.error("Error al crear backup: " + e.getMessage()));
+            }
+        });
+
+        // POST /backup/restaurar?backup=NOMBRE&confirmacion=CONFIRMAR
+        app.post("/backup/restaurar", ctx -> {
+            String nombreBackup = ctx.queryParam("backup");
+            String confirmacion = ctx.queryParam("confirmacion");
+            if (nombreBackup == null || nombreBackup.trim().isEmpty()) {
+                ctx.status(400).json(apigenerica.model.ApiRespuesta.error("Parámetro 'backup' requerido."));
+                return;
+            }
+            if (!"CONFIRMAR".equals(confirmacion)) {
+                ctx.status(400).json(apigenerica.model.ApiRespuesta.error("Requiere confirmacion=CONFIRMAR para restaurar."));
+                return;
+            }
+            java.io.File backupFile = new java.io.File(apigenerica.backup.BackupConfig.getDirectorioBackups(), nombreBackup);
+            if (!backupFile.exists()) {
+                ctx.status(404).json(apigenerica.model.ApiRespuesta.error("Backup no encontrado: " + nombreBackup));
+                return;
+            }
+            try {
+                backupOrchestrator.restaurarBackupCompleto(backupFile);
+                ctx.status(200).json(apigenerica.model.ApiRespuesta.ok("Restauración completada: " + nombreBackup));
+            } catch (Exception e) {
+                ctx.status(500).json(apigenerica.model.ApiRespuesta.error("Error al restaurar: " + e.getMessage()));
+            }
+        });
 
         // ── Alias /api/erp/backups (compatibilidad con el frontend) ─
-        app.get("/api/erp/backups",              ctx -> adminBdCtrl.listarBackups(ctx));
-        app.post("/api/erp/backups",             ctx -> adminBdCtrl.crearBackupGeneral(ctx));
-        app.post("/api/erp/backups/restaurar",   ctx -> adminBdCtrl.restaurarBackup(ctx));
+        app.get("/api/erp/backups",            ctx -> adminBdCtrl.listarBackups(ctx));
+        app.post("/api/erp/backups",           ctx -> ctx.redirect("/backup/crear", 307));
+        app.post("/api/erp/backups/restaurar", ctx -> ctx.redirect("/backup/restaurar?" + ctx.queryString(), 307));
         app.delete("/api/erp/backups/{nombre}",  ctx -> {
             ctx.status(200).json(apigenerica.model.ApiRespuesta.ok("Eliminación de backup delegada."));
         });
