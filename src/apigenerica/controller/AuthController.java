@@ -3,6 +3,8 @@ package apigenerica.controller;
 import apigenerica.model.ApiRespuesta;
 import apigenerica.dao.UsuarioDao;
 import apigenerica.excepciones.BaseDatosException;
+import apigenerica.excepciones.RecursoNoEncontradoException;
+import apigenerica.excepciones.ValidacionException;
 import apigenerica.model.EntidadDinamica;
 import apigenerica.service.JwtService;
 import com.auth0.jwt.exceptions.JWTVerificationException;
@@ -31,9 +33,7 @@ public class AuthController {
 
     /**
      * Inicia sesión y genera JWT Access y Refresh.
-     * CAMBIO: ahora el JWT incluye también el campo `tipo` (empleado/cliente)
-     * para que el frontend pueda redirigir sin depender del nombre del rol.
-     * Se elimina la contraseña universal "123456" que existía como parche.
+     * @param ctx Contexto de la petición HTTP
      */
     @SuppressWarnings("unchecked")
     public void login(Context ctx) {
@@ -75,6 +75,7 @@ public class AuthController {
 
     /**
      * Permite obtener un nuevo Access Token usando el Refresh Token.
+     * @param ctx Contexto de la petición HTTP 
      */
     @SuppressWarnings("unchecked")
     public void refresh(Context ctx) {
@@ -118,13 +119,93 @@ public class AuthController {
     }
 
     /**
-     * Registrar cuenta de usuario en la base de datos.
-     * (pendiente de implementar según el flujo de registro del proyecto)
+     * Obtener un registro de la tabla de cuentas de usuario
+     * 
+     * @param ctx Contexto de la petición HTTP 
+     */
+    public void obtenerUsuario(Context ctx) {
+        Long id = ctx.pathParamAsClass("id", Long.class).get();
+
+        EntidadDinamica usuario = usuarioDao.obtenerPorId(id);
+        if (usuario == null) {
+            ctx.status(HttpCode.NOT_FOUND).json(ApiRespuesta.error("Usuario no encontrado."));
+            return;
+        }
+
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok(usuario));
+    }
+    
+    /**
+     * Registrar cuenta de usuario en la base de datos
+     *
+     * @param ctx Contexto de la petición HTTP
      */
     public void registrar(Context ctx) {
-        Map<String, String> datosUsuario = ctx.bodyAsClass(Map.class);
-        String email    = datosUsuario.get("email");
-        String password = datosUsuario.get("password");
-        String rol      = datosUsuario.get("rol");
+        Map<String, Object> datosUsuario = ctx.bodyAsClass(Map.class);
+        String email = (String) datosUsuario.get("email");
+        String password = (String) datosUsuario.get("password");
+        Object rol = datosUsuario.get("rol");
+
+        if (email == null || password == null || rol == null) {
+            throw new ValidacionException("Todos los campos (email, password, rol) son obligatorios.");
+        }
+
+        int rolId = Integer.parseInt(rol.toString());
+        // Encriptar la contraseña
+        String passwordHash = BCrypt.hashpw(password, BCrypt.gensalt());
+
+        // Guardar en DB
+        long id = usuarioDao.crearUsuario(email, passwordHash, rolId);
+
+        ctx.status(HttpCode.CREATED).json(ApiRespuesta.ok("Usuario registrado con ID: " + id));
+    }
+
+    /**
+     * Modificar los campos de un usuario
+     * 
+     * @param ctx Contexto de la petición HTTP 
+     */
+    public void modificarUsuario(Context ctx) {
+        Long id = ctx.pathParamAsClass("id", Long.class).get();
+        Map<String, Object> datos = ctx.bodyAsClass(Map.class);
+
+        // Buscar el usuario actual
+        EntidadDinamica usuarioActual = usuarioDao.obtenerPorId(id);
+        if (usuarioActual == null) {
+            throw new RecursoNoEncontradoException("Usuario no encontrado.");
+        }
+
+        // Si el dato viene en el body, se utiliza; si no, se utiliza el de la db
+        String email = datos.containsKey("email")
+                ? (String) datos.get("email") : (String) usuarioActual.get("email");
+        int rolId;
+        if (datos.containsKey("rol")) {
+            rolId = Integer.parseInt(datos.get("rol").toString());
+        } else {
+            rolId = (int) usuarioActual.get("rol_id"); 
+        }
+        int activo;
+        if (datos.containsKey("activo")) {
+            Object val = datos.get("activo");
+            activo = (val instanceof Boolean) ? ((boolean) val ? 1 : 0) : Integer.parseInt(val.toString());
+        } else {
+            activo = (int) usuarioActual.get("activo");
+        }
+
+        // Actualizar datos
+        usuarioDao.actualizarUsuario(id, email, rolId, activo);
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok("Usuario actualizado."));
+    }
+
+    /**
+     * Borrar cuenta de la base de datos
+     *
+     * @param ctx Contexto de la petición HTTP 
+     */
+    public void eliminar(Context ctx) {
+        Long id = ctx.pathParamAsClass("id", Long.class).get();
+
+        usuarioDao.eliminarUsuario(id);
+        ctx.status(HttpCode.OK).json(ApiRespuesta.ok("Usuario eliminado."));
     }
 }
