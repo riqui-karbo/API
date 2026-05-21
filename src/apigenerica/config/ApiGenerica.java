@@ -239,72 +239,21 @@ public class ApiGenerica {
         app.delete("/api/batch/delete", ctx -> baseCtrl.deleteTransaccional(ctx));
 
         // ── Endpoints de ficheros ──────────────────────────────────
-        app.post("/api/ficheros/{tabla}", ctx -> {
-            if (fs == null) {
-                ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
-                return;
-            }
-            UploadedFile file = ctx.uploadedFile("archivo");
-            if (file == null) {
-                ctx.status(400).json(ApiRespuesta.error("No se recibio ningun archivo (campo: 'archivo')."));
-                return;
-            }
-            String uuid = UUID.randomUUID().toString();
-            fs.guardar(uuid, ctx.pathParam("tabla"), file);
-            apigenerica.model.Fichero meta = fs.obtenerMetadatos(uuid);
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("uuid", uuid);
-            resp.put("tipoDetectado", meta != null && meta.getTipoDetectado() != null
-                    ? meta.getTipoDetectado() : "");
-            ctx.status(201).json(ApiRespuesta.ok(resp));
-        });
-
-        app.get("/api/ficheros", ctx -> {
-            List<Map<String, Object>> lista = new ArrayList<>();
-            try (Connection conn = ConexionMysql.getConexion();
-                 Statement st = conn.createStatement();
-                 ResultSet rs = st.executeQuery(
-                         "SELECT * FROM erp_sistema.erp_ficheros ORDER BY fecha_subida DESC")) {
-                while (rs.next()) {
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("uuid",            rs.getString("uuid"));
-                    row.put("nombre_original", rs.getString("nombre_original"));
-                    row.put("mime_type",       rs.getString("mime_type"));
-                    row.put("tipo_detectado",  rs.getString("tipo_detectado"));
-                    row.put("tamano_bytes",    rs.getLong("tamano_bytes"));
-                    row.put("esta_en_disco",   rs.getInt("esta_en_disco") == 1);
-                    row.put("tabla_origen",    rs.getString("tabla_origen"));
-                    row.put("fecha_subida",    rs.getString("fecha_subida"));
-                    lista.add(row);
-                }
-            }
-            ctx.json(ApiRespuesta.ok(lista));
-        });
-
-        app.get("/api/ficheros/{uuid}/info", ctx -> {
-            if (ficheroCtrl == null) {
-                ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
-                return;
-            }
-            ficheroCtrl.obtenerInfo(ctx);
-        });
-
-        app.get("/api/ficheros/{uuid}/descargar", ctx -> {
-            if (ficheroCtrl == null) {
-                ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
-                return;
-            }
-            ficheroCtrl.descargar(ctx);
-        });
-
-        app.delete("/api/ficheros/{uuid}", ctx -> {
-            if (fs == null) {
-                ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
-                return;
-            }
-            fs.eliminar(ctx.pathParam("uuid"));
-            ctx.json(ApiRespuesta.ok("Fichero eliminado correctamente."));
-        });
+        if (ficheroCtrl != null) {
+            app.post("/api/ficheros/{tabla}", ctx -> ficheroCtrl.subir(ctx));
+            app.get("/api/ficheros", ctx -> ficheroCtrl.listar(ctx));
+            app.get("/api/ficheros/{uuid}/info", ctx -> ficheroCtrl.obtenerInfo(ctx));
+            app.get("/api/ficheros/{uuid}/descargar", ctx -> ficheroCtrl.descargar(ctx));
+            app.delete("/api/ficheros/{uuid}", ctx -> ficheroCtrl.eliminar(ctx));
+        } else {
+            // Si db4o falló al inicio y el servicio es nulo, devolvemos 503 Service Unavailable en todas sus rutas
+            io.javalin.http.Handler fallback = ctx -> ctx.status(503).json(ApiRespuesta.error("Servicio de ficheros no disponible."));
+            app.post("/api/ficheros/{tabla}", fallback);
+            app.get("/api/ficheros", fallback);
+            app.get("/api/ficheros/{uuid}/info", fallback);
+            app.get("/api/ficheros/{uuid}/descargar", fallback);
+            app.delete("/api/ficheros/{uuid}", fallback);
+        }
 
         // ── Pagina de prueba de backups ────────────────────────────
         app.get("/test", ctx -> {
