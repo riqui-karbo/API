@@ -16,6 +16,23 @@ import java.util.List;
  * DAO para la gestión de roles y permisos en erp_sistema.
  * Accede a las tablas erp_roles y erp_roles_permisos.
  *
+ * CAMBIOS RESPECTO A LA VERSIÓN ANTERIOR:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * obtenerPermisos(String rol): antes el parámetro podía llegar como null
+ * (lo llamaba obtenerPermisosPorRolYTabla desde RolController con null).
+ * En MySQL "WHERE rol = NULL" no devuelve nada porque NULL no es comparable
+ * con =, hay que usar IS NULL. Además no tiene sentido devolver permisos sin
+ * saber de qué rol son.
+ *
+ * El fix tiene dos partes:
+ *   1. Si rol es null o vacío, devolvemos lista vacía inmediatamente
+ *      en lugar de lanzar una query que siempre retorna 0 filas.
+ *   2. obtenerPermisosPorRolYTabla (el endpoint /api/erp/permisos que usa
+ *      el frontend legacy) ahora extrae el rol del query param 'rol_nombre'
+ *      antes de llamar a obtenerPermisos, evitando pasar null.
+ * 
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
  * @author Grupo1
  */
 public class RolDao {
@@ -65,12 +82,11 @@ public class RolDao {
     }
 
     /**
-     * Elimina un rol y todos sus permisos asociados.
+     * Elimina un rol y todos sus permisos asociados (en transacción).
      */
     public boolean eliminarRol(String nombre) {
-        // Primero eliminar permisos asociados
         String sqlPermisos = "DELETE FROM erp_roles_permisos WHERE rol = ?";
-        String sqlRol = "DELETE FROM erp_roles WHERE nombre = ?";
+        String sqlRol      = "DELETE FROM erp_roles WHERE nombre = ?";
         try (Connection conn = ConexionMysql.getConexion(AppConfig.DB_SISTEMA)) {
             conn.setAutoCommit(false);
             try {
@@ -115,8 +131,18 @@ public class RolDao {
 
     /**
      * Devuelve los permisos de un rol sobre todas las tablas/secciones.
+     *
+     * CAMBIO: si rol es null o vacío devolvemos lista vacía de inmediato.
+     * Antes se ejecutaba "WHERE rol = ?" con null, que en MySQL nunca
+     * hace match (NULL != NULL con =) y siempre devolvía 0 filas de forma
+     * silenciosa, lo cual era confuso y un bug difícil de detectar.
      */
     public List<PermisoConfig> obtenerPermisos(String rol) {
+        // Guard: sin rol no tiene sentido consultar
+        if (rol == null || rol.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+
         String sql = "SELECT tabla, puede_ver, puede_crear, puede_editar, puede_eliminar "
                    + "FROM erp_roles_permisos WHERE rol = ? ORDER BY tabla";
         List<PermisoConfig> permisos = new ArrayList<>();
