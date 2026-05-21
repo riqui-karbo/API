@@ -191,16 +191,24 @@ public class ConexionMysql {
             //   - `cargo` se mantiene como VARCHAR: representa la función laboral
             //     (Contable, Técnico...) y es independiente del rol de acceso web.
             stmt.executeUpdate(
-                "CREATE TABLE IF NOT EXISTS productos (" +
-                "  id INT AUTO_INCREMENT PRIMARY KEY," +
-                "  nombre VARCHAR(150) NOT NULL," +
-                "  descripcion TEXT DEFAULT NULL," +
-                "  referencia VARCHAR(150) DEFAULT NULL UNIQUE," +
-                "  cantidad INT DEFAULT NULL," +
-                "  precio DECIMAL(10, 2) NOT NULL," +
-                "  foto_url VARCHAR(255) DEFAULT NULL," +
-                "  esta_agotado BOOLEAN NOT NULL DEFAULT FALSE" +
-                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+                    "CREATE TABLE IF NOT EXISTS `empleados` ("
+                    + "  `id` INT AUTO_INCREMENT PRIMARY KEY,"
+                    + "  `correo_electronico` VARCHAR(255) NOT NULL UNIQUE,"
+                    + "  `nombre` VARCHAR(100) NOT NULL,"
+                    + "  `primer_apellido` VARCHAR(100) NOT NULL,"
+                    + "  `segundo_apellido` VARCHAR(100) DEFAULT NULL,"
+                    + "  `dni_nie` VARCHAR(20) NOT NULL UNIQUE,"
+                    + "  `telefono` VARCHAR(20) DEFAULT NULL,"
+                    + "  `direccion` VARCHAR(255) DEFAULT NULL,"
+                    + "  `iban` VARCHAR(34) DEFAULT NULL,"
+                    + "  `nss` VARCHAR(20) DEFAULT NULL,"
+                    + "  `cargo` VARCHAR(100) DEFAULT 'Personal',"
+                    + "  `foto_url` VARCHAR(255) DEFAULT NULL,"
+                    + "  `user_id` INT DEFAULT NULL,"
+                    + "  CONSTRAINT `fk_empleados_user`"
+                    + "    FOREIGN KEY (`user_id`) REFERENCES `erp_sistema`.`erp_users`(`id`)"
+                    + "    ON DELETE SET NULL ON UPDATE CASCADE"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
 
             // Tabla de Producto
