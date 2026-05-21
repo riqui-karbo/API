@@ -115,10 +115,11 @@ public class ApiGenerica {
             if (path.startsWith("/api/auth")
                     || path.startsWith("/api/store")
                     || path.equals("/test")
+                    || path.equals("/test-ficheros") 
                     || path.startsWith("/backup")) {
                 return;
             }
-
+            
             String authHeader = ctx.header("Authorization");
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 throw new NoAutorizadoException("Token no proporcionado.", null);

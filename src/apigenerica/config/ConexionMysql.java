@@ -119,6 +119,32 @@ public class ConexionMysql {
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
 
+            
+            //  NUEVO: índice MySQL de ficheros almacenados 
+            // Permite listar, auditar y buscar ficheros sin abrir db4o.
+            // La columna esta_en_disco indica si el contenido está en un .enc en disco
+            // (archivos > 20 MB) o en db4o (archivos ≤ 20 MB).
+            // tipo_detectado recoge el resultado del análisis de magic bytes cuando el
+            // archivo no tenía extensión o su mime era application/octet-stream.
+            stmt.executeUpdate(
+                    "CREATE TABLE IF NOT EXISTS erp_ficheros ("
+                    + "  id             INT AUTO_INCREMENT PRIMARY KEY,"
+                    + "  uuid           VARCHAR(36)   NOT NULL UNIQUE,"
+                    + "  nombre_original VARCHAR(500),"
+                    + "  mime_type      VARCHAR(100),"
+                    + "  tipo_detectado VARCHAR(50),"
+                    + // magic bytes: PDF, JPG, DESCONOCIDO…
+                    "  tamano_bytes   BIGINT,"
+                    + "  esta_en_disco  TINYINT(1)    DEFAULT 0,"
+                    + // 0=db4o, 1=fichero .enc en disco
+                    "  ruta_disco     VARCHAR(1000),"
+                    + // solo si esta_en_disco=1
+                    "  tabla_origen   VARCHAR(100),"
+                    + // tabla del cliente que lo referencia
+                    "  fecha_subida   TIMESTAMP     DEFAULT CURRENT_TIMESTAMP"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            );
+            
             // Migración idempotente: si la tabla ya existía con la columna `rol`
             // antigua, añadimos las nuevas columnas sin tocar los datos existentes.
             // Los try/catch evitan que falle si las columnas ya fueron añadidas en
