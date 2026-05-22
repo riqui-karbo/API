@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.nio.file.Files;
+import logs.service.LogService;
 
 public class BackupOrchestrator {
     private final MysqlBackupManager mysql = new MysqlBackupManager();
@@ -66,6 +67,13 @@ public class BackupOrchestrator {
             }
             // db4o, Paradox y Logs los gestiona ArchivosBackupManager
             files.restaurarBackup(tempDir);
+
+            // Reinicializar logs: limpia el buffer RAM, recarga el JSON restaurado
+            // y relanza el monitor con un snapshot fresco de la BD restaurada.
+            // Sin esto, el monitor detectaría como "cambios" todas las diferencias
+            // entre el estado anterior y el restaurado, generando logs espurios.
+            LogService.reinicializar();
+
             System.out.println("[Orchestrator] Restauración completada.");
         } finally {
             eliminarDirectorio(tempDir.toPath());

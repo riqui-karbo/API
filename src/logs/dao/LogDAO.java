@@ -77,6 +77,31 @@ public class LogDAO {
         }
     }
 
+    /**
+     * Reinicializa el DAO tras una restauración de backup.
+     *
+     * Limpia el buffer en RAM y el contador de IDs, luego recarga el contenido
+     * del logs_backup.json que acaba de ser restaurado. Así el buffer queda
+     * perfectamente sincronizado con el fichero restaurado, sin mezclar entradas
+     * del estado anterior a la restauración.
+     *
+     * NO fusiona Paradox aquí a propósito: el JSON restaurado ya es la fuente
+     * de verdad; Paradox se sincronizará de forma best-effort en el próximo
+     * arranque normal o ciclo del monitor.
+     */
+    public static synchronized void reinicializar() {
+        synchronized (bufferMemoria) {
+            bufferMemoria.clear();
+        }
+        // Resetear el contador para que se recalcule desde los datos restaurados
+        contadorId.set(-1);
+
+        cargarDesdeJSON();
+        inicializarContadorSiNecesario();
+        System.out.println("[LogDAO] Reinicializado tras restauración. "
+                + bufferMemoria.size() + " registro(s). Próximo ID: " + contadorId.get());
+    }
+
     // ---------------------------------------------------------------
     // Insertar un registro de log
     // ---------------------------------------------------------------

@@ -22,7 +22,7 @@ public class ConexionMysql {
     private static final String USUARIO = "root";
     private static final String PWD = "";
 
-    private static final List<String> TABLAS_NUCLEO = java.util.Arrays.asList("empleados", "productos", "clientes",          "incidencias");
+    private static final List<String> TABLAS_NUCLEO = java.util.Arrays.asList("empleados", "productos", "clientes","incidencias");
 
     public static void inicializar() {
         HikariConfig config = new HikariConfig();
