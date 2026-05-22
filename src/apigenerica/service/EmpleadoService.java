@@ -24,85 +24,84 @@ public class EmpleadoService {
                                               String nombre, String apellido,
                                               String dni, String cargo) {
 
-        Connection connSistema = null;
-        Connection connCliente = null;
+        String nombreRol = (rol == null || rol.trim().isEmpty()) ? "empleado" : rol.trim();
 
-        try {
-            connSistema = ConexionMysql.getConexion(AppConfig.DB_SISTEMA);
-            connCliente = ConexionMysql.getConexion(AppConfig.DB_CLIENTE);
+        // Cifrar la contraseña ANTES de abrir cualquier conexión
+        // (BCrypt es lento a propósito; no debe ocupar una conexión del pool)
+        String hashContrasena = BCrypt.hashpw(password, BCrypt.gensalt(10));
 
+        long nuevoUserId;
+
+        // ── PASO 1: insertar en erp_users (conexión abierta y cerrada antes del paso 2)
+        try (Connection connSistema = ConexionMysql.getConexion(AppConfig.DB_SISTEMA)) {
             connSistema.setAutoCommit(false);
-            connCliente.setAutoCommit(false);
+            try {
+                int rolId = obtenerRolId(connSistema, nombreRol);
 
-            // ── 1. NORMALIZAR TEXTO Y BUSCAR ID DEL ROL ──────────────────────────
-            String nombreRol = (rol == null || rol.trim().isEmpty()) ? "empleado" : rol.trim();
-            int rolId = obtenerRolId(connSistema, nombreRol);
+                String sqlUser = "INSERT INTO erp_users (email, contrasena, rol_id, tipo, activo) VALUES (?, ?, ?, ?, 1)";
+                try (PreparedStatement psUser = connSistema.prepareStatement(sqlUser, Statement.RETURN_GENERATED_KEYS)) {
+                    psUser.setString(1, email);
+                    psUser.setString(2, hashContrasena);
+                    psUser.setInt(3, rolId);
+                    psUser.setString(4, nombreRol);
+                    psUser.executeUpdate();
 
-            // Cifrar la contraseña con BCrypt
-            String hashContrasena = BCrypt.hashpw(password, BCrypt.gensalt(10));
-
-            // ── 2. PASO A: INSERTAR EN ERP_USERS ──────────────────────────────────
-            String sqlUser = "INSERT INTO erp_users (email, contrasena, rol_id, tipo, activo) VALUES (?, ?, ?, ?, 1)";
-            long nuevoUserId;
-
-            try (PreparedStatement psUser = connSistema.prepareStatement(sqlUser, Statement.RETURN_GENERATED_KEYS)) {
-
-                psUser.setString(1, email);
-                psUser.setString(2, hashContrasena);
-                psUser.setInt(3, rolId);          // ID numérico correcto (ej: 4)
-                psUser.setString(4, nombreRol);    // Texto descriptivo (ej: "recursos_humanos")
-                psUser.executeUpdate();
-
-                // Recuperamos el ID autogenerado para vincularlo en la otra BD
-                try (ResultSet generados = psUser.getGeneratedKeys()) {
-                    if (!generados.next()) {
-                        throw new SQLException("No se obtuvo el ID generado para el nuevo usuario.");
+                    try (ResultSet generados = psUser.getGeneratedKeys()) {
+                        if (!generados.next()) {
+                            throw new SQLException("No se obtuvo el ID generado para el nuevo usuario.");
+                        }
+                        nuevoUserId = generados.getLong(1);
                     }
-                    nuevoUserId = generados.getLong(1);
                 }
-            }
-
-            // ── 3. PASO B: INSERTAR EN EMPLEADOS CON EL USER_ID VINCULADO ───────────
-            String sqlEmpleado =
-                "INSERT INTO empleados (user_id, correo_electronico, nombre, primer_apellido, dni_nie, cargo) "
-              + "VALUES (?, ?, ?, ?, ?, ?)";
-
-            try (PreparedStatement psEmp = connCliente.prepareStatement(sqlEmpleado)) {
-                psEmp.setLong(1, nuevoUserId);
-                psEmp.setString(2, email);
-                psEmp.setString(3, nombre);
-                psEmp.setString(4, apellido);
-                psEmp.setString(5, dni);
-                psEmp.setString(6, cargo);
-                psEmp.executeUpdate();
-            }
-
-            // ── Confirmar ambas transacciones si todo ha ido bien ────────────────
-            connSistema.commit();
-            connCliente.commit();
-
-            System.out.println("[API] Empleado y usuario creados correctamente: " + email
-                             + " (user_id=" + nuevoUserId + ")");
-            return true;
-
-        } catch (SQLException e) {
-            System.err.println("[API] Error en el registro doble. Aplicando rollback... " + e.getMessage());
-            try {
-                if (connSistema != null) connSistema.rollback();
-                if (connCliente != null) connCliente.rollback();
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
-            return false;
-
-        } finally {
-            try {
-                if (connSistema != null) connSistema.close();
-                if (connCliente != null) connCliente.close();
+                connSistema.commit();
             } catch (SQLException e) {
-                e.printStackTrace();
+                connSistema.rollback();
+                throw e;
             }
+        } catch (SQLException e) {
+            System.err.println("[API] Error insertando en erp_users: " + e.getMessage());
+            return false;
         }
+
+        // ── PASO 2: insertar en empleados (conexión separada, el paso 1 ya cerró la suya)
+        try (Connection connCliente = ConexionMysql.getConexion(AppConfig.DB_CLIENTE)) {
+            connCliente.setAutoCommit(false);
+            try {
+                String sqlEmpleado =
+                    "INSERT INTO empleados (user_id, correo_electronico, nombre, primer_apellido, dni_nie, cargo) "
+                  + "VALUES (?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement psEmp = connCliente.prepareStatement(sqlEmpleado)) {
+                    psEmp.setLong(1, nuevoUserId);
+                    psEmp.setString(2, email);
+                    psEmp.setString(3, nombre);
+                    psEmp.setString(4, apellido);
+                    psEmp.setString(5, dni);
+                    psEmp.setString(6, cargo);
+                    psEmp.executeUpdate();
+                }
+                connCliente.commit();
+            } catch (SQLException e) {
+                connCliente.rollback();
+                // Compensar: borrar el usuario recién creado en erp_users
+                try (Connection connDeshace = ConexionMysql.getConexion(AppConfig.DB_SISTEMA);
+                     PreparedStatement psDel = connDeshace.prepareStatement(
+                             "DELETE FROM erp_users WHERE id = ?")) {
+                    psDel.setLong(1, nuevoUserId);
+                    psDel.executeUpdate();
+                    System.err.println("[API] Compensación: usuario id=" + nuevoUserId + " eliminado de erp_users.");
+                } catch (SQLException ex) {
+                    System.err.println("[API] Error en compensación: " + ex.getMessage());
+                }
+                throw e;
+            }
+        } catch (SQLException e) {
+            System.err.println("[API] Error insertando en empleados: " + e.getMessage());
+            return false;
+        }
+
+        System.out.println("[API] Empleado y usuario creados correctamente: " + email
+                         + " (user_id=" + nuevoUserId + ")");
+        return true;
     }
     
     /**

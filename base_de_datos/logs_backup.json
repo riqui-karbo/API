@@ -22,3 +22,5 @@
 ["22","sistema/web","UPDATE","erp_meta_columnas","Actualizado externamente 'user_id' [tabla_id: '4' -> '3', nombre: 'tao1' -> 'user_id', tipo: 'cadena' -> 'ENTERO']","2026-05-22 23:32:22.886"]
 ["23","sistema/web","UPDATE","erp_users","Actualizado externamente 'admin@empresa.com' [contrasena: '$2a$10$AufZP5uNNbExpFDOZOygF./CE0W0qKG8citk9gpTrZcV0V1MLGxQG' -> '$2a$10$msxT7NLzQkVc/Fw4f5X0neyPwtDSwWaRHqrzsByeaZqHsnQAetAXi']","2026-05-22 23:32:22.887"]
 ["24","sistema/web","DELETE","tao","Tabla 'tao' eliminada físicamente de la base de datos","2026-05-22 23:32:22.888"]
+["25","sistema/web","INSERT","erp_users","Usuario creado externamente: email='tao@gmail.com' rol=null activo=1","2026-05-23 01:09:48.712"]
+["26","sistema/web","INSERT","empleados","Fila insertada en 'empleados' [pk=5] {id='5', correo_electronico='tao@gmail.com', nombre='tao', ...}","2026-05-23 01:09:48.715"]
