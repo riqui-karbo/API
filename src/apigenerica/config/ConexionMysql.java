@@ -301,6 +301,17 @@ public class ConexionMysql {
                 "    ON DELETE SET NULL ON UPDATE CASCADE" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
             );
+            
+            stmt.executeUpdate(
+                "CREATE TABLE IF NOT EXISTS `incidencias` (" +
+                "  `id` INT AUTO_INCREMENT PRIMARY KEY," +
+                "  `nombre` VARCHAR(255) NOT NULL," +
+                "  `email` VARCHAR(255) NOT NULL," +
+                "  `descripcion` TEXT NOT NULL," +
+                "  `fecha` TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+            );
+            
 
             // Migración idempotente para clientes que ya existan sin user_id
             try {
@@ -564,6 +575,7 @@ public class ConexionMysql {
             }
         }
     }
+    
 
     // ── Mapear tipo MySQL → tipo genérico de la API ───────────────────────
     private static String mapearTipoMysql(String tipoMysql) {

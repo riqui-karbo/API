@@ -110,8 +110,59 @@ public class MysqlBackupManager {
         if (!archivoSql.exists())
             throw new FileNotFoundException("SQL no encontrado: " + archivoSql.getAbsolutePath());
         System.out.println("[MySQL] Restaurando " + nombreBaseDatos + "...");
+        eliminarYRecrearBaseDatos(nombreBaseDatos);
         ejecutarMysqlRestore(archivoSql, nombreBaseDatos);
         System.out.println("[MySQL] Restauración completada.");
+    }
+
+    /**
+     * Elimina la base de datos si existe y la vuelve a crear vacía.
+     * Esto garantiza una restauración limpia sin conflictos con datos previos.
+     */
+    private void eliminarYRecrearBaseDatos(String dbName) throws Exception {
+        System.out.println("[MySQL] Eliminando base de datos existente: " + dbName);
+        // Deshabilitar foreign key checks para evitar errores de constraint al borrar
+        ejecutarSentenciaSQL("SET GLOBAL FOREIGN_KEY_CHECKS = 0");
+        try {
+            ejecutarSentenciaSQL("DROP DATABASE IF EXISTS `" + dbName + "`");
+        } finally {
+            // Siempre reactivar, aunque falle el DROP
+            ejecutarSentenciaSQL("SET GLOBAL FOREIGN_KEY_CHECKS = 1");
+        }
+        System.out.println("[MySQL] Creando base de datos nueva: " + dbName);
+        ejecutarSentenciaSQL("CREATE DATABASE `" + dbName + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        System.out.println("[MySQL] Base de datos recreada correctamente.");
+    }
+
+    /**
+     * Ejecuta una sentencia SQL directamente contra el servidor MySQL (sin seleccionar BD).
+     */
+    private void ejecutarSentenciaSQL(String sentencia) throws Exception {
+        List<String> cmd = new ArrayList<>();
+        cmd.add(resolverRutaMysql());
+        cmd.add("--host=" + BackupConfig.MYSQL_HOST);
+        cmd.add("--port=" + BackupConfig.MYSQL_PORT);
+        cmd.add("--user=" + BackupConfig.MYSQL_USER);
+        if (!BackupConfig.MYSQL_PASSWORD.isEmpty())
+            cmd.add("--password=" + BackupConfig.MYSQL_PASSWORD);
+        cmd.add("--execute=" + sentencia);
+
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+
+        // Capturar salida para diagnóstico en caso de error
+        StringBuilder salida = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = br.readLine()) != null) salida.append(line).append("\n");
+        }
+
+        int codigo = p.waitFor();
+        if (codigo != 0)
+            throw new BackupException(
+                "Error al ejecutar: " + sentencia + "\nSalida: " + salida.toString().trim());
     }
 
     private void ejecutarMysqldump(String dbName, File dest) throws Exception {

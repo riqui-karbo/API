@@ -90,10 +90,15 @@ public class BackupOrchestrator {
     }
 
     private String extraerDbDesdeNombre(String nombre) {
-        if (!nombre.startsWith("mysql_") || !nombre.contains(".sql")) return null;
-        String sinPrefijo = nombre.substring(6);
-        int lastIdx = sinPrefijo.lastIndexOf('_');
-        return lastIdx > 0 ? sinPrefijo.substring(0, lastIdx) : null;
+        // Formato esperado: mysql_<dbName>_<yyyyMMdd>_<HHmmss>.sql
+        // Ejemplo:          mysql_erp_empresa_20260522_012456.sql -> "erp_empresa"
+        if (!nombre.startsWith("mysql_") || !nombre.endsWith(".sql")) return null;
+        // Quitar prefijo "mysql_" y sufijo ".sql"
+        String cuerpo = nombre.substring(6, nombre.length() - 4);
+        // El timestamp ocupa siempre 15 chars (yyyyMMdd_HHmmss) + 1 guion bajo separador = 16
+        int longitudTimestamp = BackupConfig.FORMATO_FECHA_BACKUP.length() + 1;
+        if (cuerpo.length() <= longitudTimestamp) return null;
+        return cuerpo.substring(0, cuerpo.length() - longitudTimestamp);
     }
 
     private void eliminarDirectorio(java.nio.file.Path dir) {
