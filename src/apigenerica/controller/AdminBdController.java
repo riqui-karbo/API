@@ -108,8 +108,8 @@ public class AdminBdController {
 //  ════════════════════════════════════════════════════════
 
     public void describirTabla(Context ctx) {
-        String bd = ctx.pathParam("nombre ");
-        String tabla = ctx.pathParam("tabla ");
+        String bd = ctx.pathParam("nombre");
+        String tabla = ctx.pathParam("tabla");
         List<Map<String, String>> columnas = new ArrayList<>();
         try (Connection conn = ConexionMysql.getConexion(bd); Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery("DESCRIBE  `" + tabla + "` ")) {
             while (rs.next()) {
@@ -132,8 +132,8 @@ public class AdminBdController {
 // ════════════════════════════════════════════════════════
 
     public void leerDatos(Context ctx) {
-        String bd = ctx.pathParam("nombre ");
-        String tabla = ctx.pathParam("tabla ");
+        String bd = ctx.pathParam("nombre");
+        String tabla = ctx.pathParam("tabla");
         Map<String, Object> resultado = new LinkedHashMap<>();
         List<String> cabeceras = new ArrayList<>();
         List<List<String>> filas = new ArrayList<>();
@@ -170,8 +170,8 @@ public class AdminBdController {
         String bd = ctx.pathParam("nombre");
         String tabla = ctx.pathParam("tabla");
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
-        List<String> columnas = (List<String>) body.get("columnas ");
-        List<String> valores = (List<String>) body.get("valores ");
+        List<String> columnas = (List<String>) body.get("columnas");
+        List<String> valores = (List<String>) body.get("valores");
 
         if (columnas == null || valores == null || columnas.isEmpty() || columnas.size() != valores.size()) {
             throw new ValidacionException("Los campos 'columnas' y 'valores' son obligatorios y deben tener la misma longitud. ");
@@ -206,9 +206,9 @@ public class AdminBdController {
 
     @SuppressWarnings("unchecked ")
     public void crearTabla(Context ctx) {
-        String bd = ctx.pathParam("nombre ");
+        String bd = ctx.pathParam("nombre");
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
-        String nombreTabla = (String) body.get("nombre ");
+        String nombreTabla = (String) body.get("nombre");
         List<Map<String, Object>> columnas = (List<Map<String, Object>>) body.get("columnas ");
         if (nombreTabla == null || nombreTabla.trim().isEmpty()) {
             throw new ValidacionException("El campo 'nombre' de la tabla es obligatorio. ");
@@ -223,12 +223,12 @@ public class AdminBdController {
 
         for (int i = 0; i < columnas.size(); i++) {
             Map<String, Object> col = columnas.get(i);
-            String colNombre = (String) col.get("nombre ");
+            String colNombre = (String) col.get("nombre");
             String colTipo = (String) col.get("tipo ");
-            Boolean notNull = col.get("notNull ") != null ? (Boolean) col.get("notNull ") : false;
-            Boolean isPK = col.get("isPK ") != null ? (Boolean) col.get("isPK ") : false;
-            String tablaFK = col.get("tablaForanea ") != null ? (String) col.get("tablaForanea ") : " ";
-            String colFK = col.get("columnaForanea ") != null ? (String) col.get("columnaForanea ") : " ";
+            Boolean notNull = col.get("notNull") != null ? (Boolean) col.get("notNull ") : false;
+            Boolean isPK = col.get("isPK") != null ? (Boolean) col.get("isPK ") : false;
+            String tablaFK = col.get("tablaForanea") != null ? (String) col.get("tablaForanea") : " ";
+            String colFK = col.get("columnaForanea") != null ? (String) col.get("columnaForanea") : " ";
 
             sql.append("` ").append(colNombre).append("`  ").append(colTipo);
             if (notNull) {
@@ -266,10 +266,10 @@ public class AdminBdController {
 // ════════════════════════════════════════════════════════
 
     public void borrarTabla(Context ctx) {
-        String bd = ctx.pathParam("nombre ");
-        String tabla = ctx.pathParam("tabla ");
+        String bd = ctx.pathParam("nombre");
+        String tabla = ctx.pathParam("tabla");
         try (Connection conn = ConexionMysql.getConexion(bd); Statement stmt = conn.createStatement()) {
-            stmt.executeUpdate("DROP TABLE  `" + tabla + "` ");
+            stmt.executeUpdate("DROP TABLE `" + tabla + "` ");
         } catch (SQLException e) {
             throw new BaseDatosException("Error al borrar tabla ' " + tabla + "' en BD ' " + bd + "'. ", e);
         }
