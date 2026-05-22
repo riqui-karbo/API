@@ -5,3 +5,5 @@
 ["5","sistema/web","INSERT","erp_meta_columnas","Columna creada externamente: 'asdxcsdsa' tipo=cadena nullable=1","2026-05-22 00:09:50.086"]
 ["6","usuario#1","INSERT","prueba123","Registro insertado con id=1","2026-05-22 00:09:58.027"]
 ["7","sistema/web","INSERT","prueba123","Fila insertada en 'prueba123' [pk=1] {id='1', asdasdasdasd='prueba', asdxcsdsa=''}","2026-05-22 00:10:00.105"]
+["8","usuario#1","INSERT","pruebaisraeli","Registro insertado con id=4","2026-05-22 19:08:15.518"]
+["9","sistema/web","INSERT","pruebaisraeli","Fila insertada en 'pruebaisraeli' [pk=4] {id='4', unosodo='xczvvxczv', hihitler='xzcvzcv'}","2026-05-22 19:08:16.374"]
