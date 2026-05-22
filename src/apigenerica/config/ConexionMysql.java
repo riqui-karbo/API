@@ -22,7 +22,7 @@ public class ConexionMysql {
     private static final String USUARIO = "root";
     private static final String PWD = "";
 
-    private static final List<String> TABLAS_NUCLEO = java.util.Arrays.asList("empleados", "productos", "clientes");
+    private static final List<String> TABLAS_NUCLEO = java.util.Arrays.asList("empleados", "productos", "clientes",          "incidencias");
 
     public static void inicializar() {
         HikariConfig config = new HikariConfig();
@@ -391,6 +391,7 @@ public class ConexionMysql {
         asegurarMetaTabla(conn, idModuloUnico, "empleados", "Gestión de Empleados");
         asegurarMetaTabla(conn, idModuloUnico, "productos",  "Catálogo de Productos");
         asegurarMetaTabla(conn, idModuloUnico, "clientes",   "Cartera de Clientes");
+        asegurarMetaTabla(conn, idModuloUnico, "incidencias", "Gestión de Incidencias");
     }
 
     private static long asegurarModulo(Connection conn, String nombre, String icono, int orden) throws SQLException {
