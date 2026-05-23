@@ -261,7 +261,7 @@ public class BaseController {
         if ("empleados".equalsIgnoreCase(tabla)) {
             Object userId = body.get("user_id");
 
-            if (userId == null || userId.toString().trim().isEmpty()) {
+            if (userId == null || userId.toString().trim().isEmpty()) {/////////////////////////////////////////////////////////////////////////////////////23/05/26
                 sincronizarEmpleadoConErpUsers(ctx, body);
                 return;
             }
