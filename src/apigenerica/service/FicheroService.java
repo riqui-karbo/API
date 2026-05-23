@@ -73,9 +73,9 @@ public class FicheroService {
             byte[] bytesOriginales = inputStreamToByteArray(is);
 
             // Deteccion de tipo por magic bytes
-            // cuando el Content-Type es generico ("application/octet-Stream") o el 
-            // Nombre no tiene extension, intentamos identificar el formato real 
-            // Leyendo los primeros bytes del archivo. Si no lo reconoce se guarda 
+            // cuando el Content-Type es generico ("application/octet-Stream") o el
+            // Nombre no tiene extension, intentamos identificar el formato real
+            // Leyendo los primeros bytes del archivo. Si no lo reconoce se guarda
             // Como "Desconocido": El archivo se acepta igualmente, nunca se va a rechazar
             String mimeEfectivo = file.getContentType();
             String tipoDetectado = null;
@@ -191,7 +191,7 @@ public class FicheroService {
         Files.createDirectories(directorio);
 
         // El nombre fisico incluye el uuid para evitar colisiones y la extension
-        // .enc para dejar claro que el contenido estaa cifrado 
+        // .enc para dejar claro que el contenido estaa cifrado
         String nombreFisico = uuid + "_" + nombreOriginal + ".enc";
         Path rutaArchivo = directorio.resolve(nombreFisico);
 
@@ -226,7 +226,7 @@ public class FicheroService {
             // Antes: solo descomprimia(los datos no estaban cifrado).
             // Ahora: decrypt + descompress porque guardar() siempre cifra.
             // Si por cualquier razon el objetivo viene de antes de la integracion
-            // (sin cifrado), desencriptaYDescomprimir fallará y se relanza como 
+            // (sin cifrado), desencriptaYDescomprimir fallará y se relanza como
             // IOException para que el controller devuelva 500 con mensaje claro.
             if (file.getContenido() == null) {
                 if (file.getRuta() != null && !file.getRuta().isEmpty()) {
@@ -252,7 +252,7 @@ public class FicheroService {
                 throw new IOException("Fichero sin contenido ni ruta para uuid=" + uuid);
             }
             // Archivo sin comprimir y sin cifrar: solo puede darse con objeto
-            // persistido antes de esta integracion. Los servimos tal cual para 
+            // persistido antes de esta integracion. Los servimos tal cual para
             // no romper compatibilidad con datos antiguos.
             return new ByteArrayInputStream(file.getContenido());
         }
@@ -333,7 +333,7 @@ public class FicheroService {
     private void registrarEnMysql(String uuid, String nombre, String mime,
             String tipoDetectado, long tamano, boolean enDisco, String ruta, String tabla) {
         String sql
-                = "INSERT IGNORE INTO `erp_sistema`.`erp_ficheros` "
+                = "INSERT IGNORE INTO erp_sistema.erp_ficheros "
                 + "(uuid, nombre_original, mime_type, tipo_detectado, tamano_bytes, esta_en_disco, ruta_disco, tabla_origen) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = ConexionMysql.getConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -352,7 +352,7 @@ public class FicheroService {
     }
 
     private void eliminarDeMysql(String uuid) {
-        String sql = "DELETE FROM `erp_sistema`.`erp_ficheros` WHERE uuid = ?";
+        String sql = "DELETE FROM erp_sistema.erp_ficheros WHERE uuid = ?";
         try (Connection conn = ConexionMysql.getConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, uuid);
             ps.executeUpdate();

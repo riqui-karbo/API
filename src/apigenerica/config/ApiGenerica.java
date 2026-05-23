@@ -55,19 +55,19 @@ import io.javalin.http.UploadedFile;
 public class ApiGenerica {
 
     public static void main(String[] args) {
-        // ── Auto-limpieza: matar procesos anteriores colgados ─────────
+        // ── Auto-limpieza: matar procesos anteriores colgados 
         limpiarPuertoYProcesos(7000);
 
-        // ── Inicializar conexion con MySQL ────────────────────────────
+        // ── Inicializar conexion con MySQL 
         ConexionMysql.inicializar();
 
-        // ── Inicializar conexion con Paradox ──────────────────────────
+        // ── Inicializar conexion con Paradox 
         ConexionParadox.inicializar();
 
-        // ── Inicializar motor de logs ─────────────────────────────────
+        // ── Inicializar motor de logs 
         LogService.inicializar();
 
-        // ── Instanciar servicios (inyeccion de dependencias manual) ───
+        // ── Instanciar servicios (inyeccion de dependencias manual) 
         MetaDao metaDao = new MetaDao();
         BaseDao baseDao = new BaseDao();
         ValidadorService validador = new ValidadorService(metaDao);
