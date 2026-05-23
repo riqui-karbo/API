@@ -259,8 +259,12 @@ public class BaseController {
         // Cuando se inserta un empleado desde el endpoint genérico, se sincroniza
         // automáticamente con erp_users para que el empleado tenga cuenta de acceso.
         if ("empleados".equalsIgnoreCase(tabla)) {
-            sincronizarEmpleadoConErpUsers(ctx, body);
-            return;
+            Object userId = body.get("user_id");
+
+            if (userId == null || userId.toString().trim().isEmpty()) {
+                sincronizarEmpleadoConErpUsers(ctx, body);
+                return;
+            }
         }
         // ─────────────────────────────────────────────────────────────────────
 
