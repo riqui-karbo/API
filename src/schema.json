@@ -4,11 +4,6 @@
       "nombre": "Ventas",
       "icono": "🛒",
       "orden": 1
-    },
-    {
-      "nombre": "Almacén",
-      "icono": "📦",
-      "orden": 2
     }
   ],
   "tablas": [
@@ -30,40 +25,16 @@
           "valor_defecto": null
         },
         {
-          "nombre": "cliente_id",
-          "tipo": "ENTERO",
+          "nombre": "dni_cliente",
+          "tipo": "TEXTO_CORTO",
           "nullable": false,
           "es_contrasena": false,
           "es_visible": true,
-          "es_sensible": false,
+          "es_sensible": true,
           "es_archivo": false,
           "autoincremental": false,
           "unico": false,
           "valor_defecto": null
-        },
-        {
-          "nombre": "fecha_pedido",
-          "tipo": "FECHA",
-          "nullable": false,
-          "es_contrasena": false,
-          "es_visible": true,
-          "es_sensible": false,
-          "es_archivo": false,
-          "autoincremental": false,
-          "unico": false,
-          "valor_defecto": "CURRENT_TIMESTAMP"
-        },
-        {
-          "nombre": "total",
-          "tipo": "DECIMAL",
-          "nullable": false,
-          "es_contrasena": false,
-          "es_visible": true,
-          "es_sensible": false,
-          "es_archivo": false,
-          "autoincremental": false,
-          "unico": false,
-          "valor_defecto": "0.00"
         },
         {
           "nombre": "documento_adjunto",
@@ -73,73 +44,6 @@
           "es_visible": true,
           "es_sensible": false,
           "es_archivo": true,
-          "autoincremental": false,
-          "unico": false,
-          "valor_defecto": null
-        }
-      ]
-    },
-    {
-      "modulo": "Almacén",
-      "nombre_logico": "stock_movimientos",
-      "nombre_amigable": "Movimientos de Stock",
-      "columnas": [
-        {
-          "nombre": "id",
-          "tipo": "ENTERO",
-          "nullable": false,
-          "es_contrasena": false,
-          "es_visible": true,
-          "es_sensible": false,
-          "es_archivo": false,
-          "autoincremental": true,
-          "unico": true,
-          "valor_defecto": null
-        },
-        {
-          "nombre": "producto_id",
-          "tipo": "ENTERO",
-          "nullable": false,
-          "es_contrasena": false,
-          "es_visible": true,
-          "es_sensible": false,
-          "es_archivo": false,
-          "autoincremental": false,
-          "unico": false,
-          "valor_defecto": null
-        },
-        {
-          "nombre": "cantidad",
-          "tipo": "ENTERO",
-          "nullable": false,
-          "es_contrasena": false,
-          "es_visible": true,
-          "es_sensible": false,
-          "es_archivo": false,
-          "autoincremental": false,
-          "unico": false,
-          "valor_defecto": null
-        },
-        {
-          "nombre": "tipo_movimiento",
-          "tipo": "TEXTO_CORTO",
-          "nullable": false,
-          "es_contrasena": false,
-          "es_visible": true,
-          "es_sensible": false,
-          "es_archivo": false,
-          "autoincremental": false,
-          "unico": false,
-          "valor_defecto": "'entrada'"
-        },
-        {
-          "nombre": "notas_internas",
-          "tipo": "TEXTO_LARGO",
-          "nullable": true,
-          "es_contrasena": false,
-          "es_visible": false,
-          "es_sensible": true,
-          "es_archivo": false,
           "autoincremental": false,
           "unico": false,
           "valor_defecto": null
