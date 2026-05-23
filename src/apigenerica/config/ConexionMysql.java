@@ -298,7 +298,15 @@ public class ConexionMysql {
                 }
             }
 
+            //NUEVO_=================================================================================================================================================
             inicializarModulosYTablasDelNucleo(conn);
+            // === Procesar schema personalizado ===
+            try (Connection connCliente = getConexion(AppConfig.DB_CLIENTE)) {
+                SchemaProcessor.procesarSchema(conn, connCliente);
+            } catch (SQLException e) {
+                System.err.println("[API] Error procesando schema: " + e.getMessage());
+            }
+            // =====================================
 
             System.out.println("[API] Estructura de metadatos sincronizada.");
             autoRegistrarTablas();
