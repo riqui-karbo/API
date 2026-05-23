@@ -58,16 +58,10 @@ public class EmpleadoController {
                 dto.getEmail().trim(),
                 dto.getContrasena(),
                 rol,
-                dto.getNombre()          != null ? dto.getNombre().trim()          : "",
-                dto.getPrimerApellido()  != null ? dto.getPrimerApellido().trim()  : "",
-                dto.getSegundoApellido() != null ? dto.getSegundoApellido().trim() : null,
+                dto.getNombre()         != null ? dto.getNombre().trim()         : "",
+                dto.getPrimerApellido() != null ? dto.getPrimerApellido().trim() : "",
                 dto.getDniNie().trim(),
-                dto.getTelefono()        != null ? dto.getTelefono().trim()        : null,
-                dto.getDireccion()       != null ? dto.getDireccion().trim()       : null,
-                dto.getIban()            != null ? dto.getIban().trim()            : null,
-                dto.getNss()             != null ? dto.getNss().trim()             : null,
-                dto.getCargo()           != null ? dto.getCargo().trim()           : "",
-                dto.getFotoUrlNormalizada() != null ? dto.getFotoUrlNormalizada().trim() : null
+                dto.getCargo()          != null ? dto.getCargo().trim()          : ""
         );
 
         if (ok) {
@@ -78,7 +72,7 @@ public class EmpleadoController {
                .json(ApiRespuesta.error("Error al crear el empleado. Email o DNI posiblemente duplicados."));
         }
     }
-   
+    
     /**
     * PUT /api/empleados/{id}/rol
     *
