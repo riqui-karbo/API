@@ -49,6 +49,29 @@ public class LogService {
         }
     }
 
+    /**
+     * Reinicializa el servicio de logs tras una restauración de backup.
+     *
+     * Pasos:
+     *  1. Detiene el monitor actual (evita logs espurios durante la restauración).
+     *  2. Recarga el LogDAO desde el JSON restaurado (el buffer RAM queda sincronizado).
+     *  3. Arranca un monitor nuevo con un snapshot fresco de la BD restaurada,
+     *     de modo que el próximo ciclo de polling no compare estados incongruentes.
+     *
+     * Llamar SIEMPRE después de BackupOrchestrator.restaurarBackupCompleto().
+     */
+    public static synchronized void reinicializar() {
+        // 1. Parar el monitor viejo para que no genere logs de "cambios" fantasma
+        detener();
+
+        // 2. Recargar LogDAO desde el JSON que acaba de restaurarse
+        LogDAO.reinicializar();
+
+        // 3. Arrancar un monitor nuevo con snapshot alineado al estado restaurado
+        monitor = DatabaseChangeMonitor.iniciar();
+        System.out.println("[LogService] Reiniciado tras restauración de backup.");
+    }
+
     // ---------------------------------------------------------------
     // Operaciones expuestas a la API
     // ---------------------------------------------------------------

@@ -16,6 +16,7 @@ import apigenerica.model.ColumnaConfig;
 import apigenerica.model.EntidadDinamica;
 import apigenerica.model.RelacionConfig;
 import apigenerica.model.TablaConfig;
+import apigenerica.service.EmpleadoService;
 import apigenerica.service.FicheroService;
 import apigenerica.service.MetaService;
 import apigenerica.service.OrderService;
@@ -58,6 +59,7 @@ public class BaseController {
     private final OrderService orderService;
     private final FicheroService ficheroService;
     private final ServicioCifrado cifrado;
+    private final EmpleadoService empleadoService;
 
     /**
      * Constructor con inyección de dependencias manual.
@@ -79,6 +81,7 @@ public class BaseController {
         this.orderService = orderService;
         this.ficheroService = ficheroService;
         this.cifrado = cifrado;
+        this.empleadoService = new EmpleadoService();
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -237,12 +240,29 @@ public class BaseController {
     @SuppressWarnings("unchecked")
     public void insert(Context ctx) {
         String tabla = ctx.pathParam("tabla");
+        insertEnTabla(ctx, tabla);
+    }
+
+    /**
+     * Igual que insert() pero con el nombre de tabla proporcionado directamente
+     * (útil para rutas públicas sin path param, como POST /api/store/incidencias).
+     */
+    public void insertEnTabla(Context ctx, String tabla) {
         validador.validarNombre(tabla);
 
         Map<String, Object> body = extraerDatos(ctx);
         if (body == null || body.isEmpty()) {
             throw new ValidacionException("Cuerpo de la petición vacío.");
         }
+
+        // ── CASO ESPECIAL: tabla empleados ────────────────────────────────────
+        // Cuando se inserta un empleado desde el endpoint genérico, se sincroniza
+        // automáticamente con erp_users para que el empleado tenga cuenta de acceso.
+        if ("empleados".equalsIgnoreCase(tabla)) {
+            sincronizarEmpleadoConErpUsers(ctx, body);
+            return;
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         EntidadDinamica entidad = new EntidadDinamica();
         body.forEach(entidad::set);
@@ -880,5 +900,92 @@ public class BaseController {
         } catch (Exception e) {
             return "api";
         }
+    }
+
+    // ── Sincronización empleados → erp_users ──────────────────────────────────
+
+    /**
+     * Gestiona el insert en la tabla "empleados" desde el endpoint genérico.
+     *
+     * Si el body incluye "contrasena" (o "password"), delega en EmpleadoService
+     * para que se cree el registro en erp_users y en empleados de forma atómica.
+     *
+     * Si NO viene contraseña (el frontend no la envía en este flujo), se inserta
+     * el empleado normalmente con BaseDao y luego se crea el usuario en erp_users
+     * con una contraseña temporal aleatoria que el administrador deberá cambiar.
+     *
+     * Campos esperados en el body:
+     *   - email / correo_electronico  (obligatorio)
+     *   - nombre                      (obligatorio)
+     *   - primer_apellido             (obligatorio)
+     *   - dni_nie                     (obligatorio)
+     *   - contrasena / password       (opcional; si falta se genera temporal)
+     *   - rol                         (opcional; por defecto "empleado")
+     *   - cargo                       (opcional)
+     */
+    @SuppressWarnings("unchecked")
+    private void sincronizarEmpleadoConErpUsers(Context ctx, Map<String, Object> body) {
+        // Normalizar claves del body
+        String email    = safeStr(body, "email", body.get("correo_electronico"));
+        String nombre   = safeStr(body, "nombre", null);
+        String apellido = safeStr(body, "primer_apellido", null);
+        String dni      = safeStr(body, "dni_nie", null);
+        String cargo    = safeStr(body, "cargo", null);
+        String rol      = safeStr(body, "rol", null);
+
+        // Contraseña: usar la del body si viene, si no generar una temporal
+        String contrasena = safeStr(body, "contrasena", body.get("password"));
+        boolean contrasenaGenerada = false;
+        if (contrasena == null || contrasena.trim().isEmpty()) {
+            contrasena = java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+            contrasenaGenerada = true;
+        }
+
+        // Validar campos mínimos
+        if (email == null || email.trim().isEmpty()
+                || dni == null || dni.trim().isEmpty()) {
+            throw new ValidacionException("Los campos 'email' y 'dni_nie' son obligatorios para crear un empleado.");
+        }
+
+        if (rol == null || rol.trim().isEmpty()) rol = "empleado";
+
+        boolean ok = empleadoService.registrarEmpleadoConAcceso(
+                email.trim(), contrasena, rol.trim(),
+                nombre   != null ? nombre.trim()   : "",
+                apellido != null ? apellido.trim()  : "",
+                dni.trim(),
+                cargo    != null ? cargo.trim()     : ""
+        );
+
+        if (!ok) {
+            throw new BaseDatosException(
+                "Error al crear el empleado. El email o DNI pueden estar duplicados.", null);
+        }
+
+        String usuario = obtenerUsuarioCtx(ctx);
+        LogService.registrar(usuario, "INSERT", "empleados",
+                "Empleado '" + email.trim() + "' creado con cuenta en erp_users"
+                + (contrasenaGenerada ? " (contraseña temporal generada)" : ""));
+
+        // Construir respuesta
+        Map<String, Object> datos = new java.util.LinkedHashMap<>();
+        datos.put("email", email.trim());
+        datos.put("rol", rol.trim());
+        if (contrasenaGenerada) {
+            datos.put("contrasena_temporal", contrasena);
+            datos.put("aviso", "Se ha generado una contraseña temporal. Cámbiala en el primer acceso.");
+        }
+
+        EntidadDinamica respuesta = new EntidadDinamica();
+        datos.forEach(respuesta::set);
+        ctx.status(HttpCode.CREATED).json(ApiRespuesta.ok(respuesta));
+    }
+
+    /** Extrae un String de un Map con clave primaria; si es null usa el valorAlternativo. */
+    private String safeStr(Map<String, Object> map, String clave, Object alternativo) {
+        Object v = map.get(clave);
+        if (v != null && !v.toString().trim().isEmpty()) return v.toString().trim();
+        if (alternativo != null && !alternativo.toString().trim().isEmpty()) return alternativo.toString().trim();
+        return null;
     }
 }

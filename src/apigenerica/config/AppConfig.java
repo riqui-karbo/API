@@ -7,29 +7,53 @@ package apigenerica.config;
 /**
  * @author Grupo1
  */
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
+
 public class AppConfig {
 
-    public static final String DB_SISTEMA = "erp_sistema";
+    private static final Properties PROPS = new Properties();
 
-    // Estas variables se llenan al iniciar la API (desde un .env, properties o el instalador)
-    // public static String DB_CLIENTE = System.getenv("DB_CLIENTE");
-    public static final String DB_CLIENTE = "erp_empresa";
-    
-    // private static final String SECRET_KEY = System.getenv("SECRET_KEY");
-    private static final String SECRET_KEY = "clave_secreta_de_prueba"; // Firma y verifica los tokens
+    static {
+        try (InputStream is = AppConfig.class.getClassLoader()
+                .getResourceAsStream("db.properties")) {
+            if (is == null) {
+                throw new RuntimeException(
+                    "[AppConfig] No se encontro db.properties en el classpath.");
+            }
+            PROPS.load(is);
+        } catch (IOException e) {
+            throw new RuntimeException("[AppConfig] Error leyendo db.properties: " + e.getMessage(), e);
+        }
+    }
 
-    // Getter
+    // ── Bases de datos ──────────────────────────────────────────────
+    public static final String DB_SISTEMA  = PROPS.getProperty("db.nombre_sistema", "erp_sistema");
+    public static final String DB_CLIENTE  = PROPS.getProperty("db.nombre_cliente", "erp_empresa");
+
+    // ── Conexion MySQL ──────────────────────────────────────────────
+    public static final String DB_HOST     = PROPS.getProperty("db.host",     "localhost");
+    public static final String DB_PORT     = PROPS.getProperty("db.port",     "3306");
+    public static final String DB_USUARIO  = PROPS.getProperty("db.usuario",  "root");
+    public static final String DB_PASSWORD = PROPS.getProperty("db.password", "");
+
+    // ── Rutas relativas al proyecto ─────────────────────────────────
+    public static final String DIR_BACKUPS          = PROPS.getProperty("dir.backups",          "./backups");
+    public static final String DIR_DB4O_RAIZ        = PROPS.getProperty("dir.db4o_raiz",        "./storage");
+    public static final String ARCHIVO_DB4O         = PROPS.getProperty("archivo.db4o",         "./ficheros.db4o");
+    public static final String DIR_PARADOX          = PROPS.getProperty("dir.paradox",          "./base_de_datos");
+    public static final String DIR_LOGS             = PROPS.getProperty("dir.logs",             "./base_de_datos");
+    public static final String DIR_ARCHIVOS_SEGUROS = PROPS.getProperty("dir.archivos_seguros", "./storage/ficheros_seguros");
+
+    // ── Seguridad ───────────────────────────────────────────────────
+    private static final String SECRET_KEY = PROPS.getProperty("app.secret_key", "clave_secreta_de_prueba");
+
     public static String getSecretKey() {
         return SECRET_KEY;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // NUEVO: clave AES para cifrado de ficheros sensibles
-    // ═══════════════════════════════════════════════════════════════
-    // Se lee de la variable de entorno ERP_AES_KEY si está definida (producción).
-    // Si no, cae al valor de desarrollo. Cambiarlo en producción sin recompilar.
-    // IMPORTANTE: debe tener exactamente 16, 24 o 32 caracteres para AES-128/192/256.
     public static final String AES_KEY = System.getenv("ERP_AES_KEY") != null
             ? System.getenv("ERP_AES_KEY")
-            : "ErpClaveSegura32CaracteresExact!"; // 32 chars → AES-256
+            : PROPS.getProperty("app.aes_key", "ErpClaveSegura32CaracteresExact!");
 }
