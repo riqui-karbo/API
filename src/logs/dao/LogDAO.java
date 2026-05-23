@@ -27,109 +27,71 @@ public class LogDAO {
     private static final String CARPETA_ABSOLUTA   = resolverCarpetaAbsoluta();
     private static final String JSON_FILE          = CARPETA_ABSOLUTA + File.separator + "logs_backup.json";
 
-    private static final SimpleDateFormat SDF =
-            new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+    private static final SimpleDateFormat SDF = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
 
-    // ---------------------------------------------------------------
-    // Resolver carpeta de datos
-    // ---------------------------------------------------------------
     private static String resolverCarpetaAbsoluta() {
+        // Usar la ruta configurada en AppConfig (via db.properties)
+        String dirConfigured = apigenerica.config.AppConfig.DIR_LOGS.replace("./", "");
         try {
             URL url = LogDAO.class.getProtectionDomain().getCodeSource().getLocation();
             File base    = new File(url.toURI()).getCanonicalFile();
             File raiz    = base.getParentFile().getParentFile();
-            File carpeta = new File(raiz, "base_de_datos");
+            File carpeta = new File(raiz, dirConfigured);
             carpeta.mkdirs();
             System.out.println("[LogDAO] Carpeta: " + carpeta.getAbsolutePath());
             return carpeta.getAbsolutePath();
         } catch (Exception e) {
-            File carpeta = new File("base_de_datos").getAbsoluteFile();
+            File carpeta = new File(dirConfigured).getAbsoluteFile();
             carpeta.mkdirs();
             return carpeta.getAbsolutePath();
         }
     }
 
-    // ---------------------------------------------------------------
-    // Inicializar: cargar JSON al arrancar
-    // ---------------------------------------------------------------
     public static void inicializar() {
         cargarDesdeJSON();
         inicializarContadorSiNecesario();
         System.out.println("[LogDAO] Inicializado. " + bufferMemoria.size()
-                + " registro(s) cargados. Próximo ID: " + contadorId.get());
-
-        // Intentar también leer desde Paradox (best-effort, no crítico)
+                + " registro(s) cargados. Proximo ID: " + contadorId.get());
         try {
             String json = ejecutarWorker(new String[]{"SELECT_ALL"});
             if (json != null && json.startsWith("[")) {
                 Map<Integer, String[]> paradoxRows = new LinkedHashMap<>();
                 parsearJsonFilas(json, paradoxRows);
                 synchronized (bufferMemoria) {
-                    for (Map.Entry<Integer, String[]> e : paradoxRows.entrySet()) {
+                    for (Map.Entry<Integer, String[]> e : paradoxRows.entrySet())
                         bufferMemoria.putIfAbsent(e.getKey(), e.getValue());
-                    }
                 }
                 guardarTodoElBufferEnJSON();
                 System.out.println("[LogDAO] Datos de Paradox fusionados.");
             }
         } catch (Exception e) {
-            System.err.println("[LogDAO] Paradox no disponible al arrancar (no crítico): " + e.getMessage());
+            System.err.println("[LogDAO] Paradox no disponible al arrancar (no critico): " + e.getMessage());
         }
     }
 
-    /**
-     * Reinicializa el DAO tras una restauración de backup.
-     *
-     * Limpia el buffer en RAM y el contador de IDs, luego recarga el contenido
-     * del logs_backup.json que acaba de ser restaurado. Así el buffer queda
-     * perfectamente sincronizado con el fichero restaurado, sin mezclar entradas
-     * del estado anterior a la restauración.
-     *
-     * NO fusiona Paradox aquí a propósito: el JSON restaurado ya es la fuente
-     * de verdad; Paradox se sincronizará de forma best-effort en el próximo
-     * arranque normal o ciclo del monitor.
-     */
     public static synchronized void reinicializar() {
-        synchronized (bufferMemoria) {
-            bufferMemoria.clear();
-        }
-        // Resetear el contador para que se recalcule desde los datos restaurados
+        synchronized (bufferMemoria) { bufferMemoria.clear(); }
         contadorId.set(-1);
-
         cargarDesdeJSON();
         inicializarContadorSiNecesario();
-        System.out.println("[LogDAO] Reinicializado tras restauración. "
-                + bufferMemoria.size() + " registro(s). Próximo ID: " + contadorId.get());
+        System.out.println("[LogDAO] Reinicializado tras restauracion. "
+                + bufferMemoria.size() + " registro(s). Proximo ID: " + contadorId.get());
     }
 
-    // ---------------------------------------------------------------
-    // Insertar un registro de log
-    // ---------------------------------------------------------------
-    public static void registrar(String usuario, String operacion,
-                                  String tablaAfectada, String descripcion) {
+    public static void registrar(String usuario, String operacion, String tablaAfectada, String descripcion) {
         inicializarContadorSiNecesario();
-
         int    nuevoId = contadorId.getAndIncrement();
         String ts      = SDF.format(new Date());
-
         String[] fila = {
             String.valueOf(nuevoId),
-            usuario       != null ? usuario                   : "sistema",
-            operacion     != null ? operacion.toUpperCase()   : "",
-            tablaAfectada != null ? tablaAfectada             : "",
-            descripcion   != null ? descripcion               : "",
+            usuario       != null ? usuario                 : "sistema",
+            operacion     != null ? operacion.toUpperCase() : "",
+            tablaAfectada != null ? tablaAfectada           : "",
+            descripcion   != null ? descripcion             : "",
             ts
         };
-
-        // 1. Buffer RAM (visible de inmediato)
-        synchronized (bufferMemoria) {
-            bufferMemoria.put(nuevoId, fila);
-        }
-
-        // 2. Persistir en JSON (fiable, sin dependencias externas)
+        synchronized (bufferMemoria) { bufferMemoria.put(nuevoId, fila); }
         persistirFilaEnJSON(fila);
-
-        // 3. Intentar también en Paradox (best-effort)
         try {
             String[] cmd = {
                 "INSERT",
@@ -142,39 +104,25 @@ public class LogDAO {
         }
     }
 
-    // ---------------------------------------------------------------
-    // Leer todos los logs (más reciente primero)
-    // ---------------------------------------------------------------
     public static List<String[]> obtenerTodos() {
         Map<Integer, String[]> combinado = new LinkedHashMap<>();
-
-        synchronized (bufferMemoria) {
-            combinado.putAll(bufferMemoria);
-        }
-
-        // Complementar con Paradox si responde (best-effort)
+        synchronized (bufferMemoria) { combinado.putAll(bufferMemoria); }
         try {
             String json = ejecutarWorker(new String[]{"SELECT_ALL"});
             if (json != null && json.startsWith("[")) {
                 Map<Integer, String[]> paradoxRows = new LinkedHashMap<>();
                 parsearJsonFilas(json, paradoxRows);
-                for (Map.Entry<Integer, String[]> e : paradoxRows.entrySet()) {
+                for (Map.Entry<Integer, String[]> e : paradoxRows.entrySet())
                     combinado.putIfAbsent(e.getKey(), e.getValue());
-                }
             }
         } catch (Exception ignored) {}
-
         List<Integer> ids = new ArrayList<>(combinado.keySet());
-        ids.sort((a, b) -> Integer.compare(b, a));   // DESC
+        ids.sort((a, b) -> Integer.compare(b, a));
         List<String[]> lista = new ArrayList<>(ids.size());
         for (int id : ids) lista.add(combinado.get(id));
         return lista;
     }
 
-    /**
-     * Busca logs por usuario, operación o tabla (búsqueda simple case-insensitive).
-     * Devuelve siempre en orden descendente por ID.
-     */
     public static List<String[]> buscar(String filtro) {
         if (filtro == null || filtro.trim().isEmpty()) return obtenerTodos();
         String f = filtro.toLowerCase();
@@ -191,14 +139,10 @@ public class LogDAO {
         return resultado;
     }
 
-    // ---------------------------------------------------------------
-    // JSON storage — persistencia primaria
-    // ---------------------------------------------------------------
-
     private static void cargarDesdeJSON() {
         File f = new File(JSON_FILE);
         if (!f.exists()) {
-            System.out.println("[LogDAO] No existe logs_backup.json todavía (primera vez).");
+            System.out.println("[LogDAO] No existe logs_backup.json todavia (primera vez).");
             return;
         }
         try (BufferedReader br = new BufferedReader(
@@ -226,9 +170,8 @@ public class LogDAO {
     }
 
     private static void persistirFilaEnJSON(String[] fila) {
-        try (FileOutputStream fos  = new FileOutputStream(JSON_FILE, true);
-             PrintWriter       pw  = new PrintWriter(
-                     new OutputStreamWriter(fos, StandardCharsets.UTF_8))) {
+        try (FileOutputStream fos = new FileOutputStream(JSON_FILE, true);
+             PrintWriter pw = new PrintWriter(new OutputStreamWriter(fos, StandardCharsets.UTF_8))) {
             pw.println(filaALineaJSON(fila));
             pw.flush();
         } catch (IOException e) {
@@ -238,8 +181,7 @@ public class LogDAO {
 
     private static void guardarTodoElBufferEnJSON() {
         try (PrintWriter pw = new PrintWriter(
-                new OutputStreamWriter(new FileOutputStream(JSON_FILE, false),
-                                       StandardCharsets.UTF_8))) {
+                new OutputStreamWriter(new FileOutputStream(JSON_FILE, false), StandardCharsets.UTF_8))) {
             synchronized (bufferMemoria) {
                 List<Integer> ids = new ArrayList<>(bufferMemoria.keySet());
                 ids.sort(Integer::compare);
@@ -276,53 +218,41 @@ public class LogDAO {
     }
 
     private static String escaparJSON(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
     }
 
     private static String desescaparJSON(String s) {
-        return s.replace("\\\"", "\"")
-                .replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t")
-                .replace("\\\\", "\\");
+        return s.replace("\\\"", "\"").replace("\\n", "\n")
+                .replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\");
     }
 
-    // ---------------------------------------------------------------
-    // Contador de IDs
-    // ---------------------------------------------------------------
     private static synchronized void inicializarContadorSiNecesario() {
         if (contadorId.get() != -1) return;
         int maxBuffer;
         synchronized (bufferMemoria) {
-            maxBuffer = bufferMemoria.keySet().stream()
-                    .mapToInt(Integer::intValue).max().orElse(0);
+            maxBuffer = bufferMemoria.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
         }
         contadorId.set(maxBuffer + 1);
         System.out.println("[LogDAO] Contador iniciado en: " + (maxBuffer + 1));
     }
 
-    // ---------------------------------------------------------------
-    // Paradox worker (best-effort)
-    // ---------------------------------------------------------------
     private static String ejecutarWorker(String[] workerArgs) {
         try {
             String classpath = System.getProperty("java.class.path");
             String javaExe   = System.getProperty("java.home") + "/bin/java";
             List<String> cmdList = new ArrayList<>();
-            cmdList.add(javaExe); cmdList.add("-cp"); cmdList.add(classpath);
-            cmdList.add("dao.ParadoxWorker");
+            cmdList.add(javaExe);
+            cmdList.add("-cp");
+            cmdList.add(classpath);
+            cmdList.add("logs.dao.ParadoxWorker");
             cmdList.add(CARPETA_ABSOLUTA);
             for (String a : workerArgs) cmdList.add(a);
             ProcessBuilder pb = new ProcessBuilder(cmdList);
             pb.redirectErrorStream(false);
             Process proc = pb.start();
             StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(proc.getInputStream()))) {
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
                 String line;
                 while ((line = br.readLine()) != null) sb.append(line);
             }
@@ -337,9 +267,6 @@ public class LogDAO {
         new Thread(() -> ejecutarWorker(workerArgs), "paradox-worker").start();
     }
 
-    // ---------------------------------------------------------------
-    // Helpers internos de parseo JSON
-    // ---------------------------------------------------------------
     private static void parsearJsonFilas(String json, Map<Integer, String[]> destino) {
         json = json.trim();
         if (json.equals("[]")) return;
@@ -361,8 +288,7 @@ public class LogDAO {
                         String v = campos[k].trim();
                         if (v.equals("null")) { fila[k] = ""; }
                         else {
-                            if (v.startsWith("\"") && v.endsWith("\""))
-                                v = v.substring(1, v.length() - 1);
+                            if (v.startsWith("\"") && v.endsWith("\"")) v = v.substring(1, v.length() - 1);
                             fila[k] = desescaparJSON(v);
                         }
                     }
