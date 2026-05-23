@@ -6,7 +6,9 @@ import apigenerica.backup.BackupOrchestrator;
 import apigenerica.controller.AuthController;
 import apigenerica.controller.BaseController;
 import apigenerica.controller.ConfigController;
-import apigenerica.controller.EmpleadoController;   // <- AÑADIDO
+import apigenerica.controller.EmpleadoController;
+import apigenerica.controller.ClienteController;
+import apigenerica.service.ClienteService;
 import apigenerica.controller.MetaController;
 import apigenerica.controller.ModuloController;
 import apigenerica.controller.RolController;
@@ -19,7 +21,7 @@ import apigenerica.excepciones.RecursoNoEncontradoException;
 import apigenerica.excepciones.ValidacionException;
 import apigenerica.model.ApiRespuesta;
 import apigenerica.dao.UsuarioDao;
-import apigenerica.service.EmpleadoService;          // <- AÑADIDO
+import apigenerica.service.EmpleadoService;
 import apigenerica.service.FicheroService;
 import apigenerica.service.JwtService;
 import apigenerica.service.MetaService;
@@ -95,7 +97,8 @@ public class ApiGenerica {
         AdminBdController adminBdCtrl = new AdminBdController();
         BackupOrchestrator backupOrchestrator = new BackupOrchestrator();
         LogController logCtrl = new LogController();
-        EmpleadoController empleadoCtrl = new EmpleadoController(new EmpleadoService()); // <- AÑADIDO
+        EmpleadoController empleadoCtrl = new EmpleadoController(new EmpleadoService()); 
+        ClienteController clienteCtrl = new ClienteController(new ClienteService());
 
         final FicheroService fs = ficheroService;
         final FicheroController ficheroCtrl = (fs != null) ? new FicheroController(fs) : null;
@@ -190,6 +193,9 @@ public class ApiGenerica {
         // ── Endpoints de Empleados ──────────────────────────────────────────────────
         app.post("/api/empleados/registrar", ctx -> empleadoCtrl.registrar(ctx));
         app.put("/api/empleados/{id}/rol",   ctx -> empleadoCtrl.cambiarRol(ctx));
+        
+        //Registro público de clientes (sin JWT)
+        app.post("api/store/clientes/registrar", ctx -> clienteCtrl.registrar(ctx));
 
         // ── Endpoints de logs (solo admin) ───────────────────────────
         app.get("/api/logs",  ctx -> logCtrl.listar(ctx));
