@@ -398,7 +398,7 @@ public class BaseController {
         Long id = ctx.pathParamAsClass("id", Long.class).get();
         validador.validarNombre(tabla);
 
-        Map<String, Object> body = ctx.bodyAsClass(Map.class);
+        Map<String, Object> body = extraerDatos(ctx);
         if (body == null || body.isEmpty()) {
             throw new ValidacionException("Cuerpo de la petición vacío.");
         }
