@@ -240,6 +240,14 @@ public class BaseController {
     @SuppressWarnings("unchecked")
     public void insert(Context ctx) {
         String tabla = ctx.pathParam("tabla");
+        insertEnTabla(ctx, tabla);
+    }
+
+    /**
+     * Igual que insert() pero con el nombre de tabla proporcionado directamente
+     * (útil para rutas públicas sin path param, como POST /api/store/incidencias).
+     */
+    public void insertEnTabla(Context ctx, String tabla) {
         validador.validarNombre(tabla);
 
         Map<String, Object> body = extraerDatos(ctx);

@@ -1,0 +1,2 @@
+["1","api","INSERT","incidencias","Registro insertado con id=1","2026-05-23 17:18:07.451"]
+["2","sistema/web","INSERT","incidencias","Fila insertada en 'incidencias' [pk=1] {id='1', nombre='tao', email='tao@gmail.com', ...}","2026-05-23 17:18:07.945"]

@@ -197,6 +197,11 @@ public class ApiGenerica {
         //Registro público de clientes (sin JWT)
         app.post("api/store/clientes/registrar", ctx -> clienteCtrl.registrar(ctx));
 
+        // ── Incidencias públicas (sin JWT, desde la tienda) ──────────
+        // La ruta /api/store/* ya está exenta de JWT (ver filtro antes).
+        // Usamos insertEnTabla() para evitar depender del pathParam "tabla".
+        app.post("/api/store/incidencias", ctx -> baseCtrl.insertEnTabla(ctx, "incidencias"));
+
         // ── Endpoints de logs (solo admin) ───────────────────────────
         app.get("/api/logs",  ctx -> logCtrl.listar(ctx));
         app.post("/api/logs", ctx -> logCtrl.registrar(ctx));
