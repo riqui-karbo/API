@@ -1,11 +1,13 @@
 package apigenerica.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
  * DTO para la transferencia de datos en el registro de empleados.
  * Compatible tanto con snake_case como con camelCase.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class EmpleadoRegistroDTO {
 
     // Datos para erp_users
@@ -144,9 +146,6 @@ public class EmpleadoRegistroDTO {
         this.fotoUrl = fotoUrl;
     }
 
-    /**
-     * Devuelve la foto normalizada.
-     */
     public String getFotoUrlNormalizada() {
         return fotoUrl;
     }

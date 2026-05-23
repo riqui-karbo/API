@@ -7,6 +7,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import org.mindrot.jbcrypt.BCrypt;
 
 public class EmpleadoService {
@@ -80,6 +83,61 @@ public class EmpleadoService {
 
         System.out.println("[API] Empleado y usuario creados correctamente: " + email + " (user_id=" + nuevoUserId + ")");
         return true;
+    }
+
+    /**
+     * PUT /api/empleados/{id}
+     * Actualiza los campos de la tabla empleados para el id dado.
+     * Acepta: nombre, primer_apellido, segundo_apellido, dni_nie, nss, iban,
+     *         telefono, direccion, correo_electronico, email, cargo, foto_url / fotoUrl
+     */
+    public boolean actualizarEmpleado(int idEmpleado, Map<String, Object> datos) {
+        if (datos == null || datos.isEmpty()) return false;
+
+        // Mapa de nombres alternativos -> nombre real de columna en BD
+        Map<String, String> alias = Map.of(
+            "fotoUrl",            "foto_url",
+            "primerApellido",     "primer_apellido",
+            "segundoApellido",    "segundo_apellido",
+            "dniNie",             "dni_nie",
+            "email",              "correo_electronico"
+        );
+
+        // Columnas permitidas (las que existen en la tabla empleados)
+        List<String> permitidas = List.of(
+            "nombre", "primer_apellido", "segundo_apellido", "dni_nie",
+            "nss", "iban", "telefono", "direccion", "correo_electronico",
+            "cargo", "foto_url"
+        );
+
+        List<String> setClauses = new ArrayList<>();
+        List<Object> valores    = new ArrayList<>();
+
+        for (Map.Entry<String, Object> entry : datos.entrySet()) {
+            String campo = entry.getKey();
+            // Normalizar alias
+            campo = alias.getOrDefault(campo, campo);
+            if (!permitidas.contains(campo)) continue;
+            setClauses.add(campo + " = ?");
+            valores.add(entry.getValue());
+        }
+
+        if (setClauses.isEmpty()) return false;
+
+        valores.add(idEmpleado);
+        String sql = "UPDATE empleados SET " + String.join(", ", setClauses) + " WHERE id = ?";
+
+        try (Connection conn = ConexionMysql.getConexion(AppConfig.DB_CLIENTE);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            for (int i = 0; i < valores.size(); i++) {
+                ps.setObject(i + 1, valores.get(i));
+            }
+            int filas = ps.executeUpdate();
+            return filas > 0;
+        } catch (SQLException e) {
+            System.err.println("[API] Error al actualizar empleado id=" + idEmpleado + ": " + e.getMessage());
+            return false;
+        }
     }
 
     public boolean cambiarRolEmpleado(int idEmpleado, String nuevoRol) {
