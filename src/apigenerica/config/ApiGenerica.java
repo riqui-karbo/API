@@ -122,7 +122,8 @@ public class ApiGenerica {
                     || path.startsWith("/api/store")
                     || path.equals("/test")
                     || path.equals("/test-ficheros") 
-                    || path.startsWith("/backup")) {
+                    || path.startsWith("/backup")
+                    || path.contains("/config")) {
                 return;
             }
             
